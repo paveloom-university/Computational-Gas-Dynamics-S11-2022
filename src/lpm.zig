@@ -99,27 +99,40 @@ pub fn Grid(
         }
         /// Compute a value at the top border of the cell
         inline fn top(array: anytype, n: usize, index: usize) F {
-            if (@mod(index, n) == 0) array[index] else (array[index] + array[index + n]) / 2;
+            return if (index / n == 0)
+                array[index]
+            else
+                (array[index] + array[index - n]) / 2;
         }
         /// Compute a value at the bottom border of the cell
         inline fn bottom(array: anytype, n: usize, index: usize) F {
-            if (@mod(index, n) == n) array[index] else (array[index] + array[index - n]) / 2;
+            return if (index / n == n - 1)
+                array[index]
+            else
+                (array[index] + array[index + n]) / 2;
         }
         /// Compute a value at the left border of the cell
         inline fn left(array: anytype, n: usize, index: usize) F {
-            if (@rem(index, n) == 0) array[index] else (array[index] + array[index - 1]) / 2;
+            return if (index % n == 0)
+                array[index]
+            else
+                (array[index] + array[index - 1]) / 2;
         }
         /// Compute a value at the right border of the cell
         inline fn right(array: anytype, n: usize, index: usize) F {
-            if (@rem(index, n) == n - 1) array[index] else (array[index] + array[index + 1]) / 2;
+            return if (index % n == n - 1)
+                array[index]
+            else
+                (array[index] + array[index + 1]) / 2;
         }
         /// Execute stage 1: the Euler step
         ///
         /// At this stage, only the quantities related to the cell as
         /// a whole change, and the liquid is assumed to be retarded.
-        fn stage_1(self: *Self, slice: *std.MultiArrayList.Slice) void {
+        fn stage_1(self: *Self, slice: *Cells.Slice) void {
             // Mark the Tracy zone
-            tracy.ZoneN(@src(), "Stage 1");
+            const zone = tracy.ZoneN(@src(), "Stage 1");
+            defer zone.end();
             // Unpack the struct data
             const tau = self.tau;
             const h = self.h;
@@ -134,10 +147,10 @@ pub fn Grid(
             const v_aux = slice.items(.v_aux);
             const e_aux = slice.items(.e_aux);
             // For each cell in the grid
-            var i = 0;
-            var j = 0;
-            while (i < n) : (i += 1) {
-                while (j < n) : (j += 1) {
+            var i: usize = 0;
+            var j: usize = 0;
+            while (j < n) : (j += 1) {
+                while (i < n) : (i += 1) {
                     const index = j * n + i;
                     // Compute the auxiliary values on the borders of the cells
                     const p_top = top(p, n, index);
@@ -159,16 +172,16 @@ pub fn Grid(
             }
         }
         /// Compute the evolution of the system for a single time step
-        fn step(self: *Self, slice: *std.MultiArrayList.Slice) void {
+        fn step(self: *Self, slice: *Cells.Slice) void {
             // Execute all stages
-            self.stage_1(&slice);
+            self.stage_1(slice);
         }
         /// Compute the evolution of the system for a specific amount of time steps
         pub fn compute(self: *Self, n: usize) void {
             // Compute pointers to the start of each field of the array of cells
-            const slice = self.cells.slice();
+            var slice = self.cells.slice();
             // For each time step
-            var i = 0;
+            var i: usize = 0;
             while (i < n) : (i += 1) {
                 // Perform a computation step
                 self.step(&slice);

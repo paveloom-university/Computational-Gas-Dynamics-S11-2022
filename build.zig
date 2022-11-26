@@ -1,12 +1,7 @@
 const std = @import("std");
 
 const deps = @import("deps.zig");
-
-// Library package
-const package = std.build.Pkg{
-    .name = "lpm",
-    .source = .{ .path = "src/lpm.zig" },
-};
+const tracy_pkg = deps.pkgs.tracy.pkg.?;
 
 /// Build the library and the test executable
 pub fn build(b: *std.build.Builder) void {
@@ -15,23 +10,24 @@ pub fn build(b: *std.build.Builder) void {
     // Define standard release options
     const mode = b.standardReleaseOptions();
     // Add the source code of the library
-    const lib = b.addStaticLibrary(package.name, package.source.path);
+    const lib = b.addStaticLibrary("lpm", "src/lpm.zig");
     lib.setBuildMode(mode);
     lib.install();
     // Add the source code of the test executable
     const exe = b.addExecutable("convection", "examples/convection.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    exe.addPackage(package);
     exe.install();
+    // Add an option to run the unit tests
+    const unit_tests_step = b.step("test", "Run the unit tests");
+    const unit_tests = b.addTest("src/lpm.zig");
+    unit_tests.setBuildMode(mode);
+    unit_tests_step.dependOn(&unit_tests.step);
     // Add an option to run the test executable as an integration test
-    const test_step = b.step("test", "Test the convection model");
-    {
-        const tests = b.addTest("examples/convection.zig");
-        tests.setBuildMode(mode);
-        tests.addPackage(package);
-        test_step.dependOn(&tests.step);
-    }
+    const convection_tests_step = b.step("test-run", "Test the convection model");
+    const convection_tests = b.addTest("examples/convection.zig");
+    convection_tests.setBuildMode(mode);
+    convection_tests_step.dependOn(&convection_tests.step);
     // Add a run step for the executable
     const run_step = b.step("run", "Run the convection model");
     {
@@ -60,33 +56,39 @@ pub fn build(b: *std.build.Builder) void {
     exe.addOptions("tracy_options", tracy_options);
     tracy_options.addOption(bool, "tracy", tracy_enabled_option);
     tracy_options.addOption(c_int, "tracy_depth", tracy_depth_option);
-    // Link the Tracy package to the executable
-    if (deps.pkgs.tracy.pkg) |tracy_pkg| {
-        // Add the options as a dependency to the Tracy package
-        const new_tracy_pkg = std.build.Pkg{
-            .name = "tracy",
-            .source = .{ .path = tracy_pkg.source.path },
-            .dependencies = &[_]std.build.Pkg{
-                .{ .name = "tracy_options", .source = tracy_options.getSource() },
-            },
-        };
-        // Add the package
-        lib.addPackage(new_tracy_pkg);
-        exe.addPackage(new_tracy_pkg);
-        // If Tracy integration is enabled, link the libraries
-        if (tracy_enabled_option) {
-            // Gotta call this snippet until there is a nicer way
-            inline for (comptime std.meta.declarations(deps.package_data)) |decl| {
-                const pkg = @as(deps.Package, @field(deps.package_data, decl.name));
-                for (pkg.system_libs) |item| {
-                    exe.linkSystemLibrary(item);
-                }
-                inline for (pkg.c_include_dirs) |item| {
-                    exe.addIncludePath(@field(deps.dirs, decl.name) ++ "/" ++ item);
-                }
-                inline for (pkg.c_source_files) |item| {
-                    exe.addCSourceFile(@field(deps.dirs, decl.name) ++ "/" ++ item, pkg.c_source_flags);
-                }
+    // Add the options as a dependency to the Tracy package
+    const new_tracy_pkg = std.build.Pkg{
+        .name = "tracy",
+        .source = .{ .path = tracy_pkg.source.path },
+        .dependencies = &[_]std.build.Pkg{
+            .{ .name = "tracy_options", .source = tracy_options.getSource() },
+        },
+    };
+    // Add the new Tracy package as a dependency to the library
+    const lpm_pkg = std.build.Pkg{
+        .name = "lpm",
+        .source = .{ .path = "src/lpm.zig" },
+        .dependencies = &[_]std.build.Pkg{new_tracy_pkg},
+    };
+    // Add the package
+    lib.addPackage(new_tracy_pkg);
+    exe.addPackage(lpm_pkg);
+    exe.addPackage(new_tracy_pkg);
+    unit_tests.addPackage(new_tracy_pkg);
+    convection_tests.addPackage(lpm_pkg);
+    // If the Tracy integration is enabled, link the libraries
+    if (tracy_enabled_option) {
+        // Gotta call this snippet until there is a nicer way
+        inline for (comptime std.meta.declarations(deps.package_data)) |decl| {
+            const pkg = @as(deps.Package, @field(deps.package_data, decl.name));
+            for (pkg.system_libs) |item| {
+                exe.linkSystemLibrary(item);
+            }
+            inline for (pkg.c_include_dirs) |item| {
+                exe.addIncludePath(@field(deps.dirs, decl.name) ++ "/" ++ item);
+            }
+            inline for (pkg.c_source_files) |item| {
+                exe.addCSourceFile(@field(deps.dirs, decl.name) ++ "/" ++ item, pkg.c_source_flags);
             }
         }
     }

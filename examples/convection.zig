@@ -13,6 +13,8 @@ fn run(allocator: std.mem.Allocator) !void {
         .n = 1000,
     });
     defer grid.deinit();
+    // Compute the evolution of the system for 1000 time steps
+    grid.compute(1000);
 }
 
 // Run the model

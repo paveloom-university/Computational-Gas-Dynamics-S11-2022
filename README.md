@@ -21,6 +21,8 @@ First, fetch the dependencies with `zigmod fetch`.
 
 To build and install the library, run `zig build install`.
 
+To run unit tests, run `zig build test`.
+
 See `zig build --help` for more options.
 
 #### Example
@@ -36,7 +38,7 @@ zig build run -Dtracy
 zig build run -Dtracy -Dtracy-depth=10
 
 # Run with the testing allocator
-zig build test
+zig build test-run
 ```
 
 See `zig build --help` for more options.
