@@ -4,6 +4,8 @@
 
 const std = @import("std");
 
+const tracy = @import("tracy");
+
 /// A cell in the Euler grid
 pub fn Cell(
     /// Type of a floating-point number
@@ -116,6 +118,8 @@ pub fn Grid(
         /// At this stage, only the quantities related to the cell as
         /// a whole change, and the liquid is assumed to be retarded.
         fn stage_1(self: *Self, slice: *std.MultiArrayList.Slice) void {
+            // Mark the Tracy zone
+            tracy.ZoneN(@src(), "Stage 1");
             // Unpack the struct data
             const tau = self.tau;
             const h = self.h;

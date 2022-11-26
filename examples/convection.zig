@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const lpm = @import("lpm");
+const tracy = @import("tracy");
 
 // Model the process of convection
 fn run(allocator: std.mem.Allocator) !void {
@@ -16,8 +17,12 @@ fn run(allocator: std.mem.Allocator) !void {
 
 // Run the model
 pub fn main() !void {
-    // Initialize an arena with a page allocator
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    // Mark the main function as a single frame
+    tracy.frameMarkNamed("Main");
+    // Prepare an allocator
+    var allocator = tracy.TracyAllocator(null, 5).init(std.heap.page_allocator);
+    // Initialize an arena
+    var arena = std.heap.ArenaAllocator.init(allocator.allocator());
     defer arena.deinit();
     // Run the model
     try run(arena.allocator());

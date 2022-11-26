@@ -1,0 +1,9 @@
+id: cua1fwore82ou6aj4d7qedzx2xfvxi9mem2yafppp0n7iia9
+name: lpm
+main: src/lpm.zig
+license: MIT
+description: |
+  An implementation of the large-particle method for the numerical
+  solution of hydrodynamic equations
+root_dependencies:
+  - src: git https://github.com/paveloom-f/zig-tracy-bindings

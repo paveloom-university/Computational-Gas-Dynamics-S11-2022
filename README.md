@@ -9,14 +9,34 @@ Repository:
 
 #### Prerequisites
 
-Make sure you have [Zig](https://ziglang.org) installed.
+Make sure you have installed:
+
+- [Zig](https://ziglang.org)
+- [Zigmod](https://github.com/nektro/zigmod)
+- [Tracy Profiler](https://github.com/wolfpld/tracy) (optional)
 
 #### Build
 
-To build and install the library, see `zig build install`.
+First, fetch the dependencies with `zigmod fetch`.
+
+To build and install the library, run `zig build install`.
 
 See `zig build --help` for more options.
 
 #### Example
 
-To run the example which simulates the convection process, run `zig build test`.
+To run the example which simulates the convection process, run one of the following:
+
+```bash
+# Run with the default allocator
+zig build run
+
+# Run with the Tracy integration
+zig build run -Dtracy
+zig build run -Dtracy -Dtracy-depth=10
+
+# Run with the testing allocator
+zig build test
+```
+
+See `zig build --help` for more options.
