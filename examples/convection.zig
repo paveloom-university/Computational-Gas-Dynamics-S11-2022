@@ -3,18 +3,41 @@ const std = @import("std");
 const lpm = @import("lpm");
 const tracy = @import("tracy");
 
+/// Type of a floating-point number
+/// to use across the program
+const F = f64;
+
 // Model the process of convection
 fn run(allocator: std.mem.Allocator) !void {
-    // Initialize the grid
-    var grid = try lpm.Grid(f64).init(.{
-        .allocator = allocator,
+    // Set the size of the grid
+    const n = 1000;
+    // Prepare cells
+    var cells = cells: {
+        // Initialize an empty list
+        var cells = lpm.Cells(F){};
+        // Compute the number of cells
+        const m = n * n;
+        // Prepare space for storing N x N cells
+        try cells.ensureTotalCapacity(allocator, m);
+        // Initialize each cell
+        var i: usize = 0;
+        while (i < m) : (i += 1) {
+            cells.appendAssumeCapacity(lpm.Cell(F){});
+        }
+        break :cells cells;
+    };
+    defer cells.deinit(allocator);
+    // Initialize the model
+    var model = lpm.Model(F){
         .tau = 1e-2,
         .h = 1e-2,
-        .n = 1000,
-    });
-    defer grid.deinit();
+        .grid = lpm.Grid(F){
+            .n = 1000,
+            .cells = cells,
+        },
+    };
     // Compute the evolution of the system for 1000 time steps
-    grid.compute(1000);
+    model.compute(1000);
 }
 
 // Run the model

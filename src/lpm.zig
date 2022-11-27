@@ -35,10 +35,34 @@ pub fn Cell(
     };
 }
 
+// Cells in the Euler grid
+pub fn Cells(
+    /// Type of a floating-point number
+    comptime F: type,
+) type {
+    return std.MultiArrayList(Cell(F));
+}
+
 /// Euler grid
 ///
 /// The returned struct emulates an N x N matrix of cells
 pub fn Grid(
+    /// Type of a floating-point number
+    comptime F: type,
+) type {
+    return struct {
+        /// Size of the grid
+        n: usize,
+        /// The underlying data
+        cells: Cells(F),
+    };
+}
+
+/// Model
+///
+/// Note the representation of cells in memory doesn't change
+/// with the grid step. Only the latter is model-specific.
+pub fn Model(
     /// Type of a floating-point number
     comptime F: type,
 ) type {
@@ -48,55 +72,12 @@ pub fn Grid(
     }
     return struct {
         const Self = @This();
-        /// Type of the underlying data
-        const Cells = std.MultiArrayList(Cell(F));
-        /// Allocator
-        allocator: std.mem.Allocator,
         /// Time step
         tau: F,
         /// Grid step
         h: F,
-        /// Size of the grid
-        n: usize,
-        /// The underlying data
-        cells: Cells,
-        /// Initialize a grid with a specific size
-        pub fn init(
-            args: struct {
-                /// Allocator
-                allocator: std.mem.Allocator,
-                /// Time step
-                tau: F,
-                /// Grid step
-                h: F,
-                /// Size of the grid
-                n: usize,
-            },
-        ) !Self {
-            // Initialize the underlying data
-            var cells = Cells{};
-            // Compute the number of cells
-            const m = args.n * args.n;
-            // Prepare space for storing N x N cells
-            try cells.ensureTotalCapacity(args.allocator, m);
-            // Initialize each cell
-            var i: usize = 0;
-            while (i < m) : (i += 1) {
-                cells.appendAssumeCapacity(Cell(F){});
-            }
-            // Return the grid
-            return Self{
-                .allocator = args.allocator,
-                .tau = args.tau,
-                .h = args.h,
-                .n = args.n,
-                .cells = cells,
-            };
-        }
-        /// Deinitialize the grid
-        pub fn deinit(self: *Self) void {
-            self.cells.deinit(self.allocator);
-        }
+        /// The Euler grid
+        grid: Grid(F),
         /// Compute a value at the top border of the cell
         inline fn top(array: anytype, n: usize, index: usize) F {
             return if (index / n == 0)
@@ -129,14 +110,14 @@ pub fn Grid(
         ///
         /// At this stage, only the quantities related to the cell as
         /// a whole change, and the liquid is assumed to be retarded.
-        fn stage_1(self: *Self, slice: *Cells.Slice) void {
+        fn stage_1(self: *Self, slice: *Cells(F).Slice) void {
             // Mark the Tracy zone
             const zone = tracy.ZoneN(@src(), "Stage 1");
             defer zone.end();
             // Unpack the struct data
             const tau = self.tau;
             const h = self.h;
-            const n = self.n;
+            const n = self.grid.n;
             // Get the fields of interest from the slice
             const u = slice.items(.u);
             const v = slice.items(.v);
@@ -172,14 +153,14 @@ pub fn Grid(
             }
         }
         /// Compute the evolution of the system for a single time step
-        fn step(self: *Self, slice: *Cells.Slice) void {
+        fn step(self: *Self, slice: *Cells(F).Slice) void {
             // Execute all stages
             self.stage_1(slice);
         }
         /// Compute the evolution of the system for a specific amount of time steps
         pub fn compute(self: *Self, n: usize) void {
             // Compute pointers to the start of each field of the array of cells
-            var slice = self.cells.slice();
+            var slice = self.grid.cells.slice();
             // For each time step
             var i: usize = 0;
             while (i < n) : (i += 1) {
