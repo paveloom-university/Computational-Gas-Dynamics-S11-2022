@@ -23,7 +23,7 @@ To build and install the library, run `zig build install`.
 
 To run unit tests, run `zig build test`.
 
-See `zig build --help` for more options.
+See `zig build --help` for more build options.
 
 #### Example
 
@@ -41,4 +41,6 @@ zig build run -Dtracy -Dtracy-depth=10
 zig build test-run
 ```
 
-See `zig build --help` for more options.
+See `zig build --help` for more build options.
+
+See `zig build run -- --help` for CLI arguments.

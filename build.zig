@@ -2,6 +2,7 @@ const std = @import("std");
 
 const deps = @import("deps.zig");
 const tracy_pkg = deps.pkgs.tracy.pkg.?;
+const clap_pkg = deps.pkgs.clap.pkg.?;
 
 /// Build the library and the test executable
 pub fn build(b: *std.build.Builder) void {
@@ -65,17 +66,19 @@ pub fn build(b: *std.build.Builder) void {
         },
     };
     // Add the new Tracy package as a dependency to the library
-    const lpm_pkg = std.build.Pkg{
+    const new_lpm_pkg = std.build.Pkg{
         .name = "lpm",
         .source = .{ .path = "src/lpm.zig" },
         .dependencies = &[_]std.build.Pkg{new_tracy_pkg},
     };
-    // Add the package
+    // Add the packages
     lib.addPackage(new_tracy_pkg);
-    exe.addPackage(lpm_pkg);
+    exe.addPackage(new_lpm_pkg);
     exe.addPackage(new_tracy_pkg);
+    exe.addPackage(clap_pkg);
     unit_tests.addPackage(new_tracy_pkg);
-    convection_tests.addPackage(lpm_pkg);
+    convection_tests.addPackage(new_lpm_pkg);
+    convection_tests.addPackage(clap_pkg);
     // If the Tracy integration is enabled, link the libraries
     if (tracy_enabled_option) {
         // Gotta call this snippet until there is a nicer way
