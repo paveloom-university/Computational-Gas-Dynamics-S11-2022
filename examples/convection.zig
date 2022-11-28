@@ -12,18 +12,22 @@ const F = f64;
 const Params = clap.parseParamsComptime(
     \\    --help
     \\      Display this help and exit.
-    \\-n, --size <usize>
+    \\-n <usize>
     \\      Size of the grid
     \\
     \\      [default: 1000].
-    \\    --tau  <f64>
+    \\-t, --tau <f64>
     \\      Time step.
     \\
     \\      [default: 1e-2].
-    \\-h, --step <f64>
+    \\-h <f64>
     \\      Grid step.
     \\
     \\      [default: 1e-2].
+    \\-s <usize>
+    \\      Number of time steps to compute.
+    \\
+    \\      [default: 1000].
     \\
 );
 
@@ -58,7 +62,7 @@ inline fn pressure(
     // monatomic, so the adiabatic index is
     const gamma = 3.0 / 2.0;
     // And the equation of state is
-    return (gamma - 1) * ro * eps;
+    return (gamma - 1.0) * ro * eps;
 }
 
 // Model the process of convection
@@ -78,9 +82,10 @@ fn run(allocator: std.mem.Allocator) !void {
         return clap.help(writer, clap.Help, &Params, .{});
     }
     // Unpack the arguments
-    const n = res.args.size orelse 1000;
+    const n = res.args.n orelse 1000;
     const tau = res.args.tau orelse 1e-2;
-    const h = res.args.step orelse 1e-2;
+    const h = res.args.h orelse 1e-2;
+    const s = res.args.s orelse 1000;
     // Prepare cells
     var cells = cells: {
         // Initialize an empty list
@@ -131,7 +136,7 @@ fn run(allocator: std.mem.Allocator) !void {
         },
     };
     // Compute the evolution of the system for 1000 time steps
-    model.compute(1000);
+    model.compute(s);
 }
 
 // Run the model with a default allocator

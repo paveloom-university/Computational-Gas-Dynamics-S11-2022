@@ -79,6 +79,10 @@ pub fn build(b: *std.build.Builder) void {
     unit_tests.addPackage(new_tracy_pkg);
     convection_tests.addPackage(new_lpm_pkg);
     convection_tests.addPackage(clap_pkg);
+    // Switch to the `stage1` compiler to avoid this bug:
+    // https://github.com/Hejsil/zig-clap/issues/84
+    exe.use_stage1 = true;
+    convection_tests.use_stage1 = true;
     // If the Tracy integration is enabled, link the libraries
     if (tracy_enabled_option) {
         // Gotta call this snippet until there is a nicer way

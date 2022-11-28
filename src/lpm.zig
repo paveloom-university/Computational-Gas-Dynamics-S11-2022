@@ -158,12 +158,12 @@ pub fn Model(
             self.stage_1(slice);
         }
         /// Compute the evolution of the system for a specific amount of time steps
-        pub fn compute(self: *Self, n: usize) void {
+        pub fn compute(self: *Self, s: usize) void {
             // Compute pointers to the start of each field of the array of cells
             var slice = self.grid.cells.slice();
             // For each time step
             var i: usize = 0;
-            while (i < n) : (i += 1) {
+            while (i < s) : (i += 1) {
                 // Perform a computation step
                 self.step(&slice);
             }
