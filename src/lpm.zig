@@ -1,6 +1,6 @@
 //! An implementation of the large-particle method for the numerical
 //! solution of hydrodynamic equations. Specifically, focusing on
-//! the evolution of the motion of a calorically perfect gas.
+//! solving a convection equation
 
 const std = @import("std");
 
@@ -17,15 +17,15 @@ pub fn Cell(
     }
     return struct {
         /// Velocity component along the X axis
-        u: F = 0,
+        u: F,
         /// Velocity component along the X axis
-        v: F = 0,
+        v: F,
         /// Density
-        ro: F = 0,
+        ro: F,
         /// Specific energy (energy per unit mass)
-        e: F = 0,
+        e: F,
         /// Pressure (as a function of density and specific inner energy)
-        p: F = 0,
+        p: F,
         /// Auxiliary velocity component along the X axis
         u_aux: F = 0,
         /// Auxiliary velocity component along the X axis

@@ -41,6 +41,26 @@ fn parseArgs() !clap.Result(clap.Help, &Params, clap.parsers.default) {
     return res;
 }
 
+// Compute the pressure (equation of state)
+inline fn pressure(
+    /// Velocity component along the X axis
+    u: F,
+    /// Velocity component along the X axis
+    v: F,
+    /// Density
+    ro: F,
+    /// Specific energy
+    e: F,
+) F {
+    // Compute the internal specific energy
+    const eps = e - (u * u + v * v) / 2;
+    // Let's assume that the gas is ideal and
+    // monatomic, so the adiabatic index is
+    const gamma = 3.0 / 2.0;
+    // And the equation of state is
+    return (gamma - 1) * ro * eps;
+}
+
 // Model the process of convection
 fn run(allocator: std.mem.Allocator) !void {
     // Parse the arguments
@@ -72,7 +92,31 @@ fn run(allocator: std.mem.Allocator) !void {
         // Initialize each cell
         var i: usize = 0;
         while (i < m) : (i += 1) {
-            cells.appendAssumeCapacity(lpm.Cell(F){});
+            // Let's assume we have neon as the gas of choice (it's monatomic)
+
+            // The velocity is zero (the gas is at rest) [m/s]
+            const u = 0;
+            const v = 0;
+            // The density is equal everywhere [kg/m^3]
+            const ro = 0.9002;
+            // Let's make the temperature change evenly (per row)
+            // between -25°C and +25°C (converting to Kelvins)
+            const t = -25 + @intToFloat(F, i / n) * 50 / (@intToFloat(F, n) - 1) + 273.15;
+            // Specific gas constant [J/kg/K]
+            // (gas constant [J/K/mol] divided by the molar mass [kg/mol])
+            const r = 8.314_462_618_153_24 / 0.020_179_76;
+            // The specific energy [J/kg = m^2/s^2] is
+            const e = 3 / 2 * r * t;
+            // The pressure [Pa = kg/m/s^2]
+            const p = pressure(u, v, ro, e);
+            // Initialize the cell
+            cells.appendAssumeCapacity(lpm.Cell(F){
+                .u = u,
+                .v = v,
+                .ro = ro,
+                .e = e,
+                .p = p,
+            });
         }
         break :cells cells;
     };
