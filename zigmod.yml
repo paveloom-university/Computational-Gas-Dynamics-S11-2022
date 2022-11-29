@@ -7,4 +7,4 @@ description: |
   solution of hydrodynamic equations
 root_dependencies:
   - src: git https://github.com/paveloom-f/zig-tracy-bindings
-  - src: git https://github.com/Hejsil/zig-clap commit-dbc6b8e
+  - src: git https://github.com/Hejsil/zig-clap

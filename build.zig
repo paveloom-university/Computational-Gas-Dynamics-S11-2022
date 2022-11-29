@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const deps = @import("deps.zig");
-const tracy_pkg = deps.pkgs.tracy.pkg.?;
 const clap_pkg = deps.pkgs.clap.pkg.?;
+const tracy_pkg = deps.pkgs.tracy.pkg.?;
 
 /// Build the library and the test executable
 pub fn build(b: *std.build.Builder) void {
@@ -25,10 +25,17 @@ pub fn build(b: *std.build.Builder) void {
     unit_tests.setBuildMode(mode);
     unit_tests_step.dependOn(&unit_tests.step);
     // Add an option to run the test executable as an integration test
-    const convection_tests_step = b.step("test-run", "Test the convection model");
-    const convection_tests = b.addTest("examples/convection.zig");
-    convection_tests.setBuildMode(mode);
-    convection_tests_step.dependOn(&convection_tests.step);
+    const convection_test_step = b.step("test-run", "Test the convection model");
+    const convection_test = b.addTest("examples/convection.zig");
+    convection_test.setBuildMode(mode);
+    convection_test.setFilter("Convection");
+    convection_test_step.dependOn(&convection_test.step);
+    // Add an option to run the test executable as an integration test
+    const benchmark_test_step = b.step("bench", "Benchmark the convection model");
+    const benchmark_test = b.addTest("examples/convection.zig");
+    benchmark_test.setBuildMode(mode);
+    benchmark_test.setFilter("Benchmark");
+    benchmark_test_step.dependOn(&benchmark_test.step);
     // Add a run step for the executable
     const run_step = b.step("run", "Run the convection model");
     {
@@ -71,18 +78,6 @@ pub fn build(b: *std.build.Builder) void {
         .source = .{ .path = "src/lpm.zig" },
         .dependencies = &[_]std.build.Pkg{new_tracy_pkg},
     };
-    // Add the packages
-    lib.addPackage(new_tracy_pkg);
-    exe.addPackage(new_lpm_pkg);
-    exe.addPackage(new_tracy_pkg);
-    exe.addPackage(clap_pkg);
-    unit_tests.addPackage(new_tracy_pkg);
-    convection_tests.addPackage(new_lpm_pkg);
-    convection_tests.addPackage(clap_pkg);
-    // Switch to the `stage1` compiler to avoid this bug:
-    // https://github.com/Hejsil/zig-clap/issues/84
-    exe.use_stage1 = true;
-    convection_tests.use_stage1 = true;
     // If the Tracy integration is enabled, link the libraries
     if (tracy_enabled_option) {
         // Gotta call this snippet until there is a nicer way
@@ -98,5 +93,16 @@ pub fn build(b: *std.build.Builder) void {
                 exe.addCSourceFile(@field(deps.dirs, decl.name) ++ "/" ++ item, pkg.c_source_flags);
             }
         }
+    }
+    // Add the packages
+    for ([_]*std.build.LibExeObjStep{ lib, exe, unit_tests }) |step| {
+        step.addPackage(new_tracy_pkg);
+    }
+    for ([_]*std.build.LibExeObjStep{ exe, convection_test, benchmark_test }) |step| {
+        step.addPackage(new_lpm_pkg);
+        step.addPackage(clap_pkg);
+        // Switch to the `stage1` compiler to avoid this bug:
+        // https://github.com/Hejsil/zig-clap/issues/84
+        step.use_stage1 = true;
     }
 }

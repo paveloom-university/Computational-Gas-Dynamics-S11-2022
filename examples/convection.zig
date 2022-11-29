@@ -153,3 +153,34 @@ pub fn main() !void {
 test "Convection" {
     try run(std.testing.allocator);
 }
+
+// Benchmark the model
+test "Benchmark" {
+    // Set the number of iterations
+    const n = 20;
+    // Prepare a vector for storing the elapsed time
+    var elapsed = @splat(n, @as(F, 0));
+    // Initialize a timer
+    var timer = try std.time.Timer.start();
+    // For each iteration
+    var i: usize = 0;
+    while (i < n) : (i += 1) {
+        // Reset the timer
+        timer.reset();
+        // Run the target function
+        try run(std.heap.page_allocator);
+        // Read the timer value
+        elapsed[i] = @intToFloat(F, timer.read());
+    }
+    // Compute the statistics
+    const min = @reduce(.Min, elapsed);
+    const max = @reduce(.Max, elapsed);
+    const mean = @reduce(.Add, elapsed) / n;
+    const diffs = elapsed - @splat(n, mean);
+    const std_dev = @sqrt(@reduce(.Add, diffs * diffs) / n);
+    // Print the statistics
+    std.debug.print(
+        "\nIterations: {}\nMax: {:>28.15} s.\nMin: {:>28.15} s.\nMean: {:>27.15} s.\nStd. dev.: {:>22.15} s.\n",
+        .{ n, min * 1e-9, max * 1e-9, mean * 1e-9, std_dev * 1e-9 },
+    );
+}
