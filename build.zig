@@ -11,7 +11,7 @@ pub fn build(b: *std.build.Builder) void {
     // Define standard release options
     const mode = b.standardReleaseOptions();
     // Add the source code of the library
-    const lib = b.addStaticLibrary("lpm", "src/lpm.zig");
+    const lib = b.addStaticLibrary("lpm", "src/lib.zig");
     lib.setBuildMode(mode);
     lib.install();
     // Add the source code of the test executable
@@ -21,7 +21,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.install();
     // Add an option to run the unit tests
     const unit_tests_step = b.step("test", "Run the unit tests");
-    const unit_tests = b.addTest("src/lpm.zig");
+    const unit_tests = b.addTest("src/lib.zig");
     unit_tests.setBuildMode(mode);
     unit_tests_step.dependOn(&unit_tests.step);
     // Add an option to run the test executable as an integration test
@@ -91,7 +91,7 @@ pub fn build(b: *std.build.Builder) void {
     // Define the library package
     const new_lpm_pkg = std.build.Pkg{
         .name = "lpm",
-        .source = .{ .path = "src/lpm.zig" },
+        .source = .{ .path = "src/lib.zig" },
         .dependencies = &[_]std.build.Pkg{new_tracy_pkg},
     };
     // Add the packages
