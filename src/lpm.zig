@@ -16,6 +16,7 @@ pub fn Cell(
         @compileError("This type isn't allowed for floats");
     }
     return struct {
+        const Self = @This();
         /// Velocity component along the X axis
         u: F,
         /// Velocity component along the X axis
@@ -32,6 +33,10 @@ pub fn Cell(
         v_aux: F = 0,
         /// Auxiliary specific energy (energy per unit mass)
         e_aux: F = 0,
+        /// Create a data record from a cell (as bytes)
+        fn record(self: *const Self) [32]u8 {
+            return std.mem.toBytes([_]f64{ self.u, self.v, self.ro, self.e });
+        }
     };
 }
 
@@ -58,6 +63,59 @@ pub fn Grid(
     };
 }
 
+/// Path
+const Path = []const u8;
+
+/// Output file writer
+fn Writer(
+    /// Type of a floating-point number
+    comptime F: type,
+) type {
+    return struct {
+        const Self = @This();
+        const FileWriter = std.fs.File.Writer;
+        const BufferedWriter = std.io.BufferedWriter(4096, FileWriter);
+        writer: BufferedWriter,
+        inline fn writeUsize(self: *Self, buf: *[@sizeOf(usize)]u8, value: usize) !void {
+            std.mem.writeIntNative(usize, buf, value);
+            _ = try self.writer.write(buf);
+        }
+        /// Write the header
+        pub fn writeHeader(self: *Self, s: usize, n: usize) !void {
+            // Prepare a buffer for the bytes
+            var buf: [@sizeOf(usize)]u8 = undefined;
+            // Write the number of time steps, plus one
+            try self.writeUsize(&buf, s + 1);
+            // Write the size of the grid
+            try self.writeUsize(&buf, n);
+        }
+        /// Write the grid
+        pub fn writeGrid(self: *Self, i: usize, grid: *const Grid(F)) !void {
+            // If it's the first step
+            if (i == 0) {}
+            // For each cell
+            var j: usize = 0;
+            while (j < grid.n * grid.n) : (j += 1) {
+                const cell = grid.cells.get(j);
+                // Create a data record
+                const record = cell.record();
+                // Write the data
+                _ = try self.writer.write(&record);
+            }
+        }
+        /// Create a writer from the path
+        pub fn from(path: Path) !Self {
+            // Create a file
+            const file = if (std.fs.path.isAbsolute(path))
+                try std.fs.createFileAbsolute(path, .{})
+            else
+                try std.fs.cwd().createFile(path, .{});
+            // Return the writer
+            return Self{ .writer = std.io.bufferedWriter(file.writer()) };
+        }
+    };
+}
+
 /// Model
 ///
 /// Note the representation of cells in memory doesn't change
@@ -72,12 +130,37 @@ pub fn Model(
     }
     return struct {
         const Self = @This();
-        /// Time step
         tau: F,
-        /// Grid step
         h: F,
-        /// The Euler grid
         grid: Grid(F),
+        /// The writer is initialized from the path
+        writer: Writer(F),
+        /// Initialize the model
+        pub fn init(s: struct {
+            /// Time step
+            tau: F,
+            /// Grid step
+            h: F,
+            /// The Euler grid
+            grid: Grid(F),
+            /// Relative paths to outputs files
+            ///
+            /// The results will be written to these each time step.
+            /// Note that only extensions `.csv` (for text files)
+            /// and `.bin` (for binary files) are allowed, and
+            /// there must be at least one file
+            path: Path,
+        }) !Self {
+            // Prepare the writer
+            const writer = try Writer(F).from(s.path);
+            // Initialize the model
+            return Self{
+                .tau = s.tau,
+                .h = s.h,
+                .grid = s.grid,
+                .writer = writer,
+            };
+        }
         /// Compute a value at the top border of the cell
         inline fn top(array: anytype, n: usize, index: usize) F {
             return if (index / n == 0)
@@ -158,14 +241,18 @@ pub fn Model(
             self.stage_1(slice);
         }
         /// Compute the evolution of the system for a specific amount of time steps
-        pub fn compute(self: *Self, s: usize) void {
+        pub fn compute(self: *Self, s: usize) !void {
             // Compute pointers to the start of each field of the array of cells
             var slice = self.grid.cells.slice();
+            // Write the header
+            try self.writer.writeHeader(s, self.grid.n);
             // For each time step
             var i: usize = 0;
             while (i < s) : (i += 1) {
                 // Perform a computation step
                 self.step(&slice);
+                // Write the current grid to the output file
+                try self.writer.writeGrid(i, &self.grid);
             }
         }
     };

@@ -31,15 +31,19 @@ To run the example which simulates the convection process, run one of the follow
 
 ```bash
 # Run with the default allocator
-zig build run
-zig build run -Drelease-fast
+zig build run -- -o res.bin
+zig build run -Drelease-fast -- -o res.bin
 
 # Run with the Tracy integration
-zig build run -Dtracy -Drelease-fast
-zig build run -Dtracy -Dtracy-depth=10 -Drelease-fast
+zig build run -Dtracy -Drelease-fast -- -o res.bin
+zig build run -Dtracy -Dtracy-depth=10 -Drelease-fast -- -o res.bin
 
 # Run with the testing allocator
 zig build test-run
+
+# Run the benchmark
+zig build bench
+zig build bench -Drelease-fast
 ```
 
 See `zig build --help` for more build options.

@@ -72,12 +72,6 @@ pub fn build(b: *std.build.Builder) void {
             .{ .name = "tracy_options", .source = tracy_options.getSource() },
         },
     };
-    // Add the new Tracy package as a dependency to the library
-    const new_lpm_pkg = std.build.Pkg{
-        .name = "lpm",
-        .source = .{ .path = "src/lpm.zig" },
-        .dependencies = &[_]std.build.Pkg{new_tracy_pkg},
-    };
     // If the Tracy integration is enabled, link the libraries
     if (tracy_enabled_option) {
         // Gotta call this snippet until there is a nicer way
@@ -94,13 +88,19 @@ pub fn build(b: *std.build.Builder) void {
             }
         }
     }
+    // Define the library package
+    const new_lpm_pkg = std.build.Pkg{
+        .name = "lpm",
+        .source = .{ .path = "src/lpm.zig" },
+        .dependencies = &[_]std.build.Pkg{new_tracy_pkg},
+    };
     // Add the packages
     for ([_]*std.build.LibExeObjStep{ lib, exe, unit_tests }) |step| {
         step.addPackage(new_tracy_pkg);
     }
     for ([_]*std.build.LibExeObjStep{ exe, convection_test, benchmark_test }) |step| {
-        step.addPackage(new_lpm_pkg);
         step.addPackage(clap_pkg);
+        step.addPackage(new_lpm_pkg);
         // Switch to the `stage1` compiler to avoid this bug:
         // https://github.com/Hejsil/zig-clap/issues/84
         step.use_stage1 = true;

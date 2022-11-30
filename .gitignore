@@ -6,3 +6,6 @@ zig-out
 .zigmod
 deps.zig
 zigmod.lock
+
+# Data
+*.bin

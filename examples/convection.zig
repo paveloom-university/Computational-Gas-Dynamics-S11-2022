@@ -8,31 +8,53 @@ const tracy = @import("tracy");
 /// to use across the program
 const F = f64;
 
-// Command-line parameters
-const Params = clap.parseParamsComptime(
+// Default values
+const n_default = 100;
+const tau_default = 1e-2;
+const h_default = 1e-2;
+const s_default = 1000;
+
+/// Command-line arguments
+const Args = struct {
+    n: usize = n_default,
+    tau: F = tau_default,
+    h: F = h_default,
+    s: usize = s_default,
+    path: []const u8,
+};
+
+/// Command-line parameters
+const Params = clap.parseParamsComptime(std.fmt.comptimePrint(
     \\    --help
     \\      Display this help and exit.
+    \\
     \\-n <usize>
     \\      Size of the grid
     \\
-    \\      [default: 1000].
+    \\      [default: {}].
+    \\
     \\-t, --tau <f64>
     \\      Time step.
     \\
-    \\      [default: 1e-2].
+    \\      [default: {}].
+    \\
     \\-h <f64>
     \\      Grid step.
     \\
-    \\      [default: 1e-2].
+    \\      [default: {}].
+    \\
     \\-s <usize>
     \\      Number of time steps to compute.
     \\
-    \\      [default: 1000].
+    \\      [default: {}].
     \\
-);
+    \\-o, --output <str>
+    \\      A path to the output file.
+    \\
+, .{ n_default, tau_default, h_default, s_default }));
 
 // Parse the command-line arguments
-fn parseArgs() !clap.Result(clap.Help, &Params, clap.parsers.default) {
+fn parseArgs() !Args {
     // Parse the command-line arguments
     var diag = clap.Diagnostic{};
     var res = clap.parse(clap.Help, &Params, clap.parsers.default, .{
@@ -42,7 +64,33 @@ fn parseArgs() !clap.Result(clap.Help, &Params, clap.parsers.default) {
         try diag.report(std.io.getStdErr().writer(), err);
         return err;
     };
-    return res;
+    defer res.deinit();
+    // Show help if requested
+    if (res.args.help) {
+        const writer = std.io.getStdErr().writer();
+        try writer.print("{s}\n{s}\n{s}\n\n{s}", .{
+            "\u{001b}[1;32mlpm\u{001b}[m 0.1.0",
+            "Pavel Sobolev <paveloom@riseup.net>",
+            "Modelling convection with the large-particle method",
+            "\u{001b}[0;33mPARAMETERS:\u{001b}[m\n",
+        });
+        try clap.help(writer, clap.Help, &Params, .{});
+        std.os.exit(0);
+    }
+    // Unpack the path
+    const path = res.args.output orelse {
+        const stderr = std.io.getStdErr().writer();
+        try stderr.writeAll("A path to the output file is required.\n");
+        std.os.exit(1);
+    };
+    // Return the arguments
+    return Args{
+        .n = res.args.n orelse n_default,
+        .tau = res.args.tau orelse tau_default,
+        .h = res.args.h orelse h_default,
+        .s = res.args.s orelse s_default,
+        .path = path,
+    };
 }
 
 // Compute the pressure (equation of state)
@@ -66,32 +114,13 @@ inline fn pressure(
 }
 
 // Model the process of convection
-fn run(allocator: std.mem.Allocator) !void {
-    // Parse the arguments
-    const res = try parseArgs();
-    defer res.deinit();
-    // Show help if requested
-    if (res.args.help) {
-        const writer = std.io.getStdErr().writer();
-        try writer.print("{s}\n{s}\n{s}\n\n{s}", .{
-            "\u{001b}[1;32mlpm\u{001b}[m 0.1.0",
-            "Pavel Sobolev <paveloom@riseup.net>",
-            "Modelling convection with the large-particle method",
-            "\u{001b}[0;33mPARAMETERS:\u{001b}[m\n",
-        });
-        return clap.help(writer, clap.Help, &Params, .{});
-    }
-    // Unpack the arguments
-    const n = res.args.n orelse 1000;
-    const tau = res.args.tau orelse 1e-2;
-    const h = res.args.h orelse 1e-2;
-    const s = res.args.s orelse 1000;
+fn run(allocator: std.mem.Allocator, args: *const Args) !void {
     // Prepare cells
     var cells = cells: {
         // Initialize an empty list
         var cells = lpm.Cells(F){};
         // Compute the number of cells
-        const m = n * n;
+        const m = args.n * args.n;
         // Prepare space for storing N x N cells
         try cells.ensureTotalCapacity(allocator, m);
         // Initialize each cell
@@ -106,7 +135,10 @@ fn run(allocator: std.mem.Allocator) !void {
             const ro = 0.9002;
             // Let's make the temperature change evenly (per row)
             // between -25°C and +25°C (converting to Kelvins)
-            const t = -25 + @intToFloat(F, i / n) * 50 / (@intToFloat(F, n) - 1) + 273.15;
+            const t = -25 +
+                @intToFloat(F, i / args.n) *
+                50 / (@intToFloat(F, args.n) - 1) +
+                273.15;
             // Specific gas constant [J/kg/K]
             // (gas constant [J/K/mol] divided by the molar mass [kg/mol])
             const r = 8.314_462_618_153_24 / 0.020_179_76;
@@ -127,16 +159,17 @@ fn run(allocator: std.mem.Allocator) !void {
     };
     defer cells.deinit(allocator);
     // Initialize the model
-    var model = lpm.Model(F){
-        .tau = tau,
-        .h = h,
+    var model = try lpm.Model(F).init(.{
+        .tau = args.tau,
+        .h = args.h,
         .grid = lpm.Grid(F){
-            .n = n,
+            .n = args.n,
             .cells = cells,
         },
-    };
+        .path = args.path,
+    });
     // Compute the evolution of the system for 1000 time steps
-    model.compute(s);
+    try model.compute(args.s);
 }
 
 // Run the model with a default allocator
@@ -145,19 +178,30 @@ pub fn main() !void {
     tracy.frameMarkNamed("Main");
     // Prepare an allocator
     var tracy_allocator = tracy.TracyAllocator(null, 5).init(std.heap.page_allocator);
+    // Parse the arguments
+    const args = try parseArgs();
     // Run the model
-    try run(tracy_allocator.allocator());
+    try run(tracy_allocator.allocator(), &args);
 }
 
 // Run the model with a testing allocator
 test "Convection" {
-    try run(std.testing.allocator);
+    // Prepare test arguments
+    const args = Args{
+        .path = "res.bin",
+    };
+    // Run the model
+    try run(std.testing.allocator, &args);
 }
 
 // Benchmark the model
 test "Benchmark" {
     // Set the number of iterations
     const n = 20;
+    // Prepare test arguments
+    const args = Args{
+        .path = "res.bin",
+    };
     // Prepare a vector for storing the elapsed time
     var elapsed = @splat(n, @as(F, 0));
     // Initialize a timer
@@ -168,7 +212,7 @@ test "Benchmark" {
         // Reset the timer
         timer.reset();
         // Run the target function
-        try run(std.heap.page_allocator);
+        try run(std.heap.page_allocator, &args);
         // Read the timer value
         elapsed[i] = @intToFloat(F, timer.read());
     }
