@@ -34,6 +34,14 @@ pub fn Cell(
     };
 }
 
+/// Direction
+pub const Dir = enum {
+    top,
+    bottom,
+    left,
+    right,
+};
+
 /// Cells in the Euler grid
 pub fn Cells(
     /// Type of a floating-point number
@@ -50,9 +58,35 @@ pub fn Grid(
     comptime F: type,
 ) type {
     return struct {
+        const Self = @This();
         /// Size of the grid
         n: usize,
         /// The underlying data
         cells: Cells(F),
+        /// Check if the cell is near the edge of the grid
+        pub inline fn nearEdge(self: *Self, comptime dir: Dir, index: usize) bool {
+            return switch (dir) {
+                .top => index / self.n == 0,
+                .bottom => index / self.n == self.n - 1,
+                .left => index % self.n == 0,
+                .right => index % self.n == self.n - 1,
+            };
+        }
+        /// Get a value from the neighbour cell
+        pub inline fn neighbour(self: *Self, comptime dir: Dir, array: anytype, index: usize) F {
+            return if (self.nearEdge(dir, index)) 0 else switch (dir) {
+                .top => array[index - self.n],
+                .bottom => array[index + self.n],
+                .left => array[index - 1],
+                .right => array[index + 1],
+            };
+        }
+        /// Compute a value at the border of the cell
+        pub inline fn border(self: *Self, comptime dir: Dir, array: anytype, index: usize) F {
+            return if (self.nearEdge(dir, index))
+                0
+            else
+                (array[index] + self.neighbour(dir, array, index)) / 2;
+        }
     };
 }
