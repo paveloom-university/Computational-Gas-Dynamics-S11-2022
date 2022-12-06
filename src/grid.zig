@@ -25,12 +25,10 @@ pub fn Cell(
         u_aux: F = 0,
         /// Auxiliary velocity component along the X axis
         v_aux: F = 0,
+        /// Auxiliary density
+        ro_aux: F = 0,
         /// Auxiliary specific energy (energy per unit mass)
         e_aux: F = 0,
-        /// Create a data record from a cell (as bytes)
-        pub fn record(self: *const Self) [32]u8 {
-            return std.mem.toBytes([_]f64{ self.u, self.v, self.ro, self.e });
-        }
     };
 }
 
@@ -52,7 +50,8 @@ pub fn Cells(
 
 /// Euler grid
 ///
-/// The returned struct emulates an N x N matrix of cells
+/// The returned struct emulates an N x N matrix of cells.
+/// Note that the index grows left-to-right, bottom-to-top.
 pub fn Grid(
     /// Type of a floating-point number
     comptime F: type,
@@ -66,27 +65,29 @@ pub fn Grid(
         /// Check if the cell is near the edge of the grid
         pub inline fn nearEdge(self: *Self, comptime dir: Dir, index: usize) bool {
             return switch (dir) {
-                .top => index / self.n == 0,
-                .bottom => index / self.n == self.n - 1,
+                .top => index / self.n == self.n - 1,
+                .bottom => index / self.n == 0,
                 .left => index % self.n == 0,
                 .right => index % self.n == self.n - 1,
             };
         }
         /// Get a value from the neighbour cell
-        pub inline fn neighbour(self: *Self, comptime dir: Dir, array: anytype, index: usize) F {
-            return if (self.nearEdge(dir, index)) 0 else switch (dir) {
-                .top => array[index - self.n],
-                .bottom => array[index + self.n],
+        pub inline fn neighbour(self: *Self, comptime dir: Dir, comptime normal: bool, array: []F, index: usize) F {
+            return if (self.nearEdge(dir, index))
+                // If requested a normal value, change the sign
+                //
+                // This should only apply to the velocities
+                if (normal) -array[index] else array[index]
+            else switch (dir) {
+                .top => array[index + self.n],
+                .bottom => array[index - self.n],
                 .left => array[index - 1],
                 .right => array[index + 1],
             };
         }
         /// Compute a value at the border of the cell
-        pub inline fn border(self: *Self, comptime dir: Dir, array: anytype, index: usize) F {
-            return if (self.nearEdge(dir, index))
-                0
-            else
-                (array[index] + self.neighbour(dir, array, index)) / 2;
+        pub inline fn border(self: *Self, comptime dir: Dir, comptime normal: bool, array: []F, index: usize) F {
+            return (array[index] + self.neighbour(dir, normal, array, index)) / 2;
         }
     };
 }

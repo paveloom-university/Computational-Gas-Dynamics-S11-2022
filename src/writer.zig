@@ -1,6 +1,9 @@
 const std = @import("std");
 
-const Grid = @import("grid.zig").Grid;
+const grid = @import("grid.zig");
+
+const Cells = grid.Cells;
+const Grid = grid.Grid;
 const Path = @import("lib.zig").Path;
 
 /// Output file writer
@@ -21,23 +24,17 @@ pub fn Writer(
         pub fn writeHeader(self: *Self, s: usize, n: usize) !void {
             // Prepare a buffer for the bytes
             var buf: [@sizeOf(usize)]u8 = undefined;
-            // Write the number of time steps, plus one
-            try self.writeUsize(&buf, s + 1);
+            // Write the number of time steps
+            try self.writeUsize(&buf, s);
             // Write the size of the grid
             try self.writeUsize(&buf, n);
         }
-        /// Write the grid
-        pub fn writeGrid(self: *Self, i: usize, grid: *const Grid(F)) !void {
-            // If it's the first step
-            if (i == 0) {}
-            // For each cell
-            var j: usize = 0;
-            while (j < grid.n * grid.n) : (j += 1) {
-                const cell = grid.cells.get(j);
-                // Create a data record
-                const record = cell.record();
-                // Write the data
-                _ = try self.writer.write(&record);
+        /// Write the grid from a slice
+        pub fn writeGrid(self: *Self, slice: *const Cells(F).Slice) !void {
+            // Write the fields of interest as raw data
+            inline for (&[_]Cells(F).Field{ .u, .v, .ro, .e }) |field| {
+                const bytes = std.mem.sliceAsBytes(slice.items(field));
+                _ = try self.writer.write(bytes);
             }
         }
         /// Create a writer from the path

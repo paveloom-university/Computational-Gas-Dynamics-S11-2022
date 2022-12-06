@@ -11,9 +11,11 @@ Repository:
 
 Make sure you have installed:
 
+- [Julia](https://julialang.org)
 - [Zig](https://ziglang.org)
 - [Zigmod](https://github.com/nektro/zigmod)
-- [Tracy Profiler](https://github.com/wolfpld/tracy) (optional)
+
+Optionally, you might also want to install [Tracy Profiler](https://github.com/wolfpld/tracy).
 
 #### Build
 
@@ -49,3 +51,19 @@ zig build bench -Drelease-fast
 See `zig build --help` for more build options.
 
 See `zig build run -- --help` for CLI arguments.
+
+To animate the results, first, instantiate the project with
+
+```bash
+julia --project=. -e "using Pkg; Pkg.instantiate()"
+```
+
+Then, run one of the following
+
+```bash
+# Run without a daemon
+julia --project=. scripts/animate.jl res.bin
+
+# Run with a daemon
+./julia.bash scripts/animate.jl res.bin
+```

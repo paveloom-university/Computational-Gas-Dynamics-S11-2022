@@ -10,9 +10,9 @@ const F = f64;
 
 // Default values
 const n_default = 100;
-const tau_default = 1e-2;
-const h_default = 1e-2;
-const s_default = 1000;
+const tau_default = 1e-4;
+const h_default = 1e-4;
+const s_default = 20;
 
 /// Command-line arguments
 const Args = struct {
@@ -72,7 +72,7 @@ fn parseArgs() !Args {
             "\u{001b}[1;32mlpm\u{001b}[m 0.1.0",
             "Pavel Sobolev <paveloom@riseup.net>",
             "Modelling convection with the large-particle method",
-            "\u{001b}[0;33mPARAMETERS:\u{001b}[m\n",
+            "\u{001b}[0;33mOPTIONS:\u{001b}[m\n",
         });
         try clap.help(writer, clap.Help, &Params, .{});
         std.os.exit(0);
@@ -93,8 +93,8 @@ fn parseArgs() !Args {
     };
 }
 
-// Compute the pressure (equation of state)
-inline fn pressure(
+// Equation of state
+fn eqs(
     /// Velocity component along the X axis
     u: F,
     /// Velocity component along the X axis
@@ -104,12 +104,12 @@ inline fn pressure(
     /// Specific energy
     e: F,
 ) F {
-    // Compute the internal specific energy
+    // Compute the internal specific energy [J/kg = m^2/s^2]
     const eps = e - (u * u + v * v) / 2;
     // Let's assume that the gas is ideal and
     // monatomic, so the adiabatic index is
     const gamma = 3.0 / 2.0;
-    // And the equation of state is
+    // And the equation of state is [Pa = kg/m/s^2]
     return (gamma - 1.0) * ro * eps;
 }
 
@@ -137,7 +137,11 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
             // between -25°C and +25°C (converting to Kelvins)
             const t = -25 +
                 @intToFloat(F, i / args.n) *
-                50 / (@intToFloat(F, args.n) - 1) +
+                50 / @intToFloat(F, args.n - 1) +
+                // @intToFloat(F, i / args.n) *
+                // 0.1 / @intToFloat(F, args.n - 1) +
+                // @intToFloat(F, i) *
+                // 50 / @intToFloat(F, args.n * args.n - 1) +
                 273.15;
             // Specific gas constant [J/kg/K]
             // (gas constant [J/K/mol] divided by the molar mass [kg/mol])
@@ -145,7 +149,7 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
             // The specific energy [J/kg = m^2/s^2] is
             const e = 3 / 2 * r * t;
             // The pressure [Pa = kg/m/s^2]
-            const p = pressure(u, v, ro, e);
+            const p = eqs(u, v, ro, e);
             // Initialize the cell
             cells.appendAssumeCapacity(lpm.Cell(F){
                 .u = u,
@@ -166,6 +170,7 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
             .n = args.n,
             .cells = cells,
         },
+        .eqs = eqs,
         .path = args.path,
     });
     // Compute the evolution of the system for 1000 time steps

@@ -9,3 +9,6 @@ zigmod.lock
 
 # Data
 *.bin
+
+# Plots
+plots
