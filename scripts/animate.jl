@@ -172,7 +172,7 @@ for field in vec_fields
     for i in 0:2
         plot(field, i)
         subscript_index = join(map(d -> '₀' + d, reverse(digits(i))))
-        savefig(joinpath(PLOTS_DIR, "$(field)$(subscript_index).png"))
+        savefig(joinpath(PLOTS_DIR, "$(field)$(subscript_index)$(POSTFIX).png"))
     end
 end
 
@@ -182,7 +182,7 @@ for field in vec_fields
     anim = @animate for i in 0:data.s
         plot(field, i)
     end
-    gif(anim, joinpath(PLOTS_DIR, "$(field).mp4"), fps=15, show_msg=false)
+    gif(anim, joinpath(PLOTS_DIR, "$(field)$(POSTFIX).mp4"), fps=15, show_msg=false)
 end
 
 # Mark data for garbage collection

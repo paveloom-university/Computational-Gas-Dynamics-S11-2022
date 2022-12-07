@@ -63,7 +63,13 @@ Then, run one of the following
 ```bash
 # Run without a daemon
 julia --project=. scripts/animate.jl res.bin
+julia --project=. scripts/animate.jl --postfix "'Custom postfix'" res.bin
 
 # Run with a daemon
 ./julia.bash scripts/animate.jl res.bin
+./julia.bash scripts/animate.jl --postfix "'Custom postfix'" res.bin
 ```
+
+Use the `--help` flag to get help information.
+
+To kill the daemon, run `./julia.bash kill`.
