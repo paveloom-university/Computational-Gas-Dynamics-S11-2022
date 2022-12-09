@@ -8,11 +8,14 @@ const tracy = @import("tracy");
 /// to use across the program
 const F = f64;
 
-// Default values
+// Default values of the parameters
+//
+// First three should follow the Courant–Friedrichs–Lewy condition
 const n_default = 100;
-const tau_default = 1e-4;
+const tau_default = 1e-8;
 const h_default = 1e-4;
-const s_default = 20;
+const s_default = 1000;
+const seed_default = 0;
 
 /// Command-line arguments
 const Args = struct {
@@ -20,6 +23,7 @@ const Args = struct {
     tau: F = tau_default,
     h: F = h_default,
     s: usize = s_default,
+    seed: u64 = seed_default,
     path: []const u8,
 };
 
@@ -48,10 +52,15 @@ const Params = clap.parseParamsComptime(std.fmt.comptimePrint(
     \\
     \\      [default: {}].
     \\
+    \\--seed <u64>
+    \\      Seed of the random number generator.
+    \\
+    \\      [default: {}].
+    \\
     \\-o, --output <str>
     \\      A path to the output file.
     \\
-, .{ n_default, tau_default, h_default, s_default }));
+, .{ n_default, tau_default, h_default, s_default, seed_default }));
 
 // Parse the command-line arguments
 fn parseArgs() !Args {
@@ -89,6 +98,7 @@ fn parseArgs() !Args {
         .tau = res.args.tau orelse tau_default,
         .h = res.args.h orelse h_default,
         .s = res.args.s orelse s_default,
+        .seed = res.args.seed orelse seed_default,
         .path = path,
     };
 }
@@ -108,7 +118,7 @@ fn eqs(
     const eps = e - (u * u + v * v) / 2;
     // Let's assume that the gas is ideal and
     // monatomic, so the adiabatic index is
-    const gamma = 3.0 / 2.0;
+    const gamma = 5.0 / 3.0;
     // And the equation of state is [Pa = kg/m/s^2]
     return (gamma - 1.0) * ro * eps;
 }
@@ -123,14 +133,16 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
         const m = args.n * args.n;
         // Prepare space for storing N x N cells
         try cells.ensureTotalCapacity(allocator, m);
+        // Prepare a random number generator
+        var rng = std.rand.DefaultPrng.init(args.seed).random();
         // Initialize each cell
         var i: usize = 0;
         while (i < m) : (i += 1) {
             // Let's assume we have neon as the gas of choice (it's monatomic)
 
-            // The velocity is zero (the gas is at rest) [m/s]
-            const u = 0;
-            const v = 0;
+            // The velocity components fluctuate around zero [m/s]
+            const u = rng.floatNorm(F);
+            const v = rng.floatNorm(F);
             // The density is equal everywhere [kg/m^3]
             const ro = 0.9002;
             // Let's make the temperature change evenly (per row)
@@ -138,16 +150,12 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
             const t = -25 +
                 @intToFloat(F, i / args.n) *
                 50 / @intToFloat(F, args.n - 1) +
-                // @intToFloat(F, i / args.n) *
-                // 0.1 / @intToFloat(F, args.n - 1) +
-                // @intToFloat(F, i) *
-                // 50 / @intToFloat(F, args.n * args.n - 1) +
                 273.15;
             // Specific gas constant [J/kg/K]
             // (gas constant [J/K/mol] divided by the molar mass [kg/mol])
             const r = 8.314_462_618_153_24 / 0.020_179_76;
             // The specific energy [J/kg = m^2/s^2] is
-            const e = 3 / 2 * r * t;
+            const e = 3.0 / 2.0 * r * t;
             // The pressure [Pa = kg/m/s^2]
             const p = eqs(u, v, ro, e);
             // Initialize the cell

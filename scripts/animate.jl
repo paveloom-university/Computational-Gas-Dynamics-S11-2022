@@ -179,7 +179,7 @@ end
 # Create animations of the evolution
 for field in vec_fields
     println(pad, "> Animating the evolution of `$(field)`...")
-    anim = @animate for i in 0:data.s
+    anim = @animate for i in 0:10:data.s
         plot(field, i)
     end
     gif(anim, joinpath(PLOTS_DIR, "$(field)$(POSTFIX).mp4"), fps=15, show_msg=false)

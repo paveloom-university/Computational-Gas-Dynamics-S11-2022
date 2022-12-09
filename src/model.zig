@@ -10,8 +10,6 @@ const Grid = grid.Grid;
 const Path = @import("lib.zig").Path;
 const Writer = @import("writer.zig").Writer;
 
-const tracker = 200;
-
 /// Model
 ///
 /// Note the representation of cells in memory doesn't change
@@ -73,8 +71,8 @@ pub fn Model(
         /// A flow to/from the neighbour cell
         const Flow = struct {
             value: F,
-            /// 1.0 if the gas flows into the cell, 0.0 otherwise
-            into: F,
+            /// `true` if the gas flows into the cell, `false` otherwise
+            into: bool,
         };
         /// Flows to/from the neighbour cells
         const Flows = struct {
@@ -91,31 +89,24 @@ pub fn Model(
             ro_aux: []F,
             index: usize,
         ) Flow {
+            // Compute the halved sum of velocities
             const aux_vel_average = (vel_aux[index] + self.grid.neighbour(dir, true, vel_aux, index)) / 2;
-            if (index == tracker + self.grid.n or index == tracker) {
-                std.debug.print("aux_vel_average: {} {}\n", .{ index, aux_vel_average });
-            }
-            // const into: F = if (aux_vel_average > 0) 0.0 else 1.0;
-            const into: F = if (aux_vel_average > 0) switch (dir) {
-                .right, .top => 0.0,
-                .left, .bottom => 1.0,
+            // Since we have axes left-to-right, bottom-to-top,
+            // having positive sum of velocities here means
+            // that the gas flows out of the cell if the direction
+            // is right or top, and into the cell otherwise.
+            const into = if (aux_vel_average > 0) switch (dir) {
+                .right, .top => false,
+                .left, .bottom => true,
             } else switch (dir) {
-                .right, .top => 1.0,
-                .left, .bottom => 0.0,
+                .right, .top => true,
+                .left, .bottom => false,
             };
-            // const value = aux_vel_average * if (aux_vel_average > 0)
-            //     ro_aux[index]
-            // else
-            //     self.grid.neighbour(dir, false, ro_aux, index);
-            const value = aux_vel_average * ((1 - into) * ro_aux[index] +
-                into * self.grid.neighbour(dir, false, ro_aux, index));
-            // const value = aux_vel_average * if (aux_vel_average > 0) switch (dir) {
-            //     .right, .top => ro_aux[index],
-            //     .left, .bottom => self.grid.neighbour(dir, false, ro_aux, index),
-            // } else switch (dir) {
-            //     .right, .top => -self.grid.neighbour(dir, false, ro_aux, index),
-            //     .left, .bottom => -ro_aux[index],
-            // };
+            // Whether gas flows into the cell or out of it defines whose density we take
+            const value =
+                (if (into) self.grid.neighbour(dir, false, ro_aux, index) else ro_aux[index]) *
+                aux_vel_average * self.tau * self.h;
+            // Return the flow
             return Flow{
                 .value = value,
                 .into = into,
@@ -131,29 +122,13 @@ pub fn Model(
             ro_prev: F,
             flows: Flows,
         ) F {
-            const first = ro_prev / ro * array[index];
-            // const second = (flows.left.value * (1 - flows.left.into) * self.grid.neighbour(.left, normal, array, index) -
-            //     flows.right.value * (1 - flows.right.into) * self.grid.neighbour(.right, normal, array, index) +
-            //     flows.bottom.value * (1 - flows.bottom.into) * self.grid.neighbour(.bottom, normal, array, index) -
-            //     flows.top.value * (1 - flows.top.into) * self.grid.neighbour(.top, normal, array, index) +
-            //     (flows.left.value * flows.left.into -
-            //     flows.right.value * flows.right.into +
-            //     flows.bottom.value * flows.bottom.into -
-            //     flows.top.value * flows.top.into) * array[index]) *
-            //     self.tau / self.h / ro;
-            const second = (flows.left.value * flows.left.into * self.grid.neighbour(.left, normal, array, index) -
-                flows.right.value * flows.right.into * self.grid.neighbour(.right, normal, array, index) +
-                flows.bottom.value * flows.bottom.into * self.grid.neighbour(.bottom, normal, array, index) -
-                flows.top.value * flows.top.into * self.grid.neighbour(.top, normal, array, index) +
-                (flows.left.value * (1 - flows.left.into) -
-                flows.right.value * (1 - flows.right.into) +
-                flows.bottom.value * (1 - flows.bottom.into) -
-                flows.top.value * (1 - flows.top.into)) * array[index]) *
-                self.tau / self.h / ro;
-            if (index == tracker) {
-                std.debug.print("final_update: {} {}\n", .{ first, second });
-            }
-            return first + second;
+            return ro_prev / ro * array[index] +
+                // Note that we choose between the neighbour and the current cell here, too
+                (flows.left.value * (if (flows.left.into) self.grid.neighbour(.left, normal, array, index) else array[index]) -
+                flows.right.value * (if (flows.right.into) self.grid.neighbour(.right, normal, array, index) else array[index]) +
+                flows.bottom.value * (if (flows.bottom.into) self.grid.neighbour(.bottom, normal, array, index) else array[index]) -
+                flows.top.value * (if (flows.top.into) self.grid.neighbour(.top, normal, array, index) else array[index])) /
+                self.h / self.h / ro;
         }
         /// Compute the evolution of the system for a single time step
         fn step(self: *Self, slice: *Cells(F).Slice) void {
@@ -197,22 +172,10 @@ pub fn Model(
                 u_aux[index] = u[index] - k * (p_right - p_left);
                 v_aux[index] = v[index] - k * (p_top - p_bottom);
                 e_aux[index] = e[index] - k * (p_top * v_top - p_bottom * v_bottom + p_right * u_right - p_left * u_left);
-                if (index == tracker) {
-                    std.debug.print("{}\n", .{index});
-                    std.debug.print("u_aux: {}, v_aux: {} e_aux: {}\n", .{ u_aux[index], v_aux[index], e_aux[index] });
-                    std.debug.print("k: {}\n", .{k});
-                    std.debug.print("p_top: {}, p_bottom: {}, p_left: {}, p_right: {}\n", .{ p_top, p_bottom, p_left, p_right });
-                    std.debug.print("v_top: {}, v_bottom: {}, u_left: {}, u_right: {}\n", .{ v_top, v_bottom, u_left, u_right });
-                    // std.debug.print("ro: {}, u: {}, v: {}, e: {}\n", .{ ro[index], u[index], v[index], e[index] });
-                }
             }
-            // For each cell in the grid
-            index = 0;
-            while (index < m) : (index += 1) {
-                // Copy the density matrix (since we compute
-                // the density during the time step)
-                ro_aux[index] = ro[index];
-            }
+            // Copy the density matrix (since we
+            // compute the density in the next part)
+            std.mem.copy(F, ro_aux, ro);
             // For each cell in the grid
             index = 0;
             while (index < m) : (index += 1) {
@@ -237,25 +200,11 @@ pub fn Model(
                 // flow parameters are determined
 
                 const ro_prev = ro[index];
-                ro[index] += tau / h * (flows.left.value - flows.right.value + flows.bottom.value - flows.top.value);
-                // ro[index] += 2 * tau / h *
-                //     (flows.bottom.value * (flows.bottom.into - 0.5) +
-                //     flows.left.value * (flows.left.into - 0.5) +
-                //     flows.top.value * (flows.top.into - 0.5) +
-                //     flows.right.value * (flows.right.into - 0.5));
+                ro[index] += (flows.left.value - flows.right.value + flows.bottom.value - flows.top.value) / h / h;
                 u[index] = self.final_update(true, u_aux, index, ro[index], ro_prev, flows);
                 v[index] = self.final_update(true, v_aux, index, ro[index], ro_prev, flows);
                 e[index] = self.final_update(false, e_aux, index, ro[index], ro_prev, flows);
                 p[index] = self.eqs(u[index], v[index], ro[index], e[index]);
-                if (index == tracker + self.grid.n) {
-                    std.debug.print("{} flows: {}\n\n", .{ index, flows });
-                }
-                if (index == tracker) {
-                    std.debug.print("flows: {}\n", .{flows});
-                    // std.debug.print("u_aux: {}, v_aux: {} e_aux: {}\n", .{ u_aux[index], v_aux[index], e_aux[index] });
-                    // std.debug.print("{} {} {} {} {} {} {}\n", .{ p_top, p_bottom, p_left, p_right, p[index], p[index - self.grid.n], k });
-                    std.debug.print("ro: {}, u: {}, v: {}, e: {}\n", .{ ro[index], u[index], v[index], e[index] });
-                }
             }
         }
         /// Compute the evolution of the system for a specific amount of time steps
