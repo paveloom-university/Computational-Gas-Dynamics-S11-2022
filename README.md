@@ -12,7 +12,7 @@ Repository:
 Make sure you have installed:
 
 - [Julia](https://julialang.org)
-- [Zig](https://ziglang.org)
+- [Zig](https://ziglang.org) (`v0.10.0`)
 - [Zigmod](https://github.com/nektro/zigmod)
 
 Optionally, you might also want to install [Tracy Profiler](https://github.com/wolfpld/tracy).

@@ -99,10 +99,12 @@ pub fn build(b: *std.build.Builder) void {
         step.addPackage(new_tracy_pkg);
     }
     for ([_]*std.build.LibExeObjStep{ exe, convection_test, benchmark_test }) |step| {
-        step.addPackage(clap_pkg);
         step.addPackage(new_lpm_pkg);
-        // Switch to the `stage1` compiler to avoid this bug:
+        // Switch to the `stage1` compiler to avoid the
         // https://github.com/Hejsil/zig-clap/issues/84
+        // bug and to avoid passing a function pointer
+        // instead of the function body
         step.use_stage1 = true;
     }
+    exe.addPackage(clap_pkg);
 }

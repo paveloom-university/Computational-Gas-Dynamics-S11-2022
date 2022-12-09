@@ -6,5 +6,5 @@ description: |
   An implementation of the large-particle method for the numerical
   solution of hydrodynamic equations
 root_dependencies:
-  - src: git https://github.com/paveloom-f/zig-tracy-bindings
-  - src: git https://github.com/Hejsil/zig-clap
+  - src: git https://github.com/paveloom-f/zig-tracy-bindings commit-9accdd
+  - src: git https://github.com/Hejsil/zig-clap commit-dbc6b8
