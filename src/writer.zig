@@ -21,11 +21,13 @@ pub fn Writer(
             _ = try self.writer.write(buf);
         }
         /// Write the header
-        pub fn writeHeader(self: *Self, s: usize, n: usize) !void {
+        pub fn writeHeader(self: *Self, s: usize, d: usize, n: usize) !void {
             // Prepare a buffer for the bytes
             var buf: [@sizeOf(usize)]u8 = undefined;
             // Write the number of time steps
             try self.writeUsize(&buf, s);
+            // Write the frame step
+            try self.writeUsize(&buf, d);
             // Write the size of the grid
             try self.writeUsize(&buf, n);
         }

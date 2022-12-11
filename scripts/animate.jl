@@ -111,27 +111,44 @@ println(pad, "> Loading the data...")
 "Data structure of the input file"
 struct Data
     s::I
+    d::I
     n::I
+    l::I
     u::Vector{Matrix{F}}
     v::Vector{Matrix{F}}
     ρ::Vector{Matrix{F}}
     e::Vector{Matrix{F}}
 end
 
+"Extremas along all frames"
+mutable struct Extrema
+    u::Tuple{F,F}
+    v::Tuple{F,F}
+    ρ::Tuple{F,F}
+    e::Tuple{F,F}
+    Extrema() = new()
+end
+
 # Get the fields with the vector type
-vec_fields = fieldnames(Data)[3:end]
+vec_fields = fieldnames(Data)[end-3:end]
 
 "Read the binary file"
 function read_binary(path::AbstractString)::Data
     open(path, "r") do io
         # Read the number of time steps
         s = read(io, I)
+        # Read the frame step
+        d = read(io, I)
         # Read the size of the matrix
         n = read(io, I)
+        # Prepare a range of real indices
+        indices = unique([0; 0:d:s; s])
+        # Compute the length of the vectors
+        l = length(indices)
         # Initialize the data struct
-        data = Data(s, n, ntuple(_ -> [], 4)...)
+        data = Data(s, d, n, l, ntuple(_ -> [], 4)...)
         # For each time step
-        for _ in 0:s
+        for _ in 1:l
             # For each matrix field
             for field in vec_fields
                 # Get the matrix
@@ -152,6 +169,22 @@ end
 # Read the data
 data = read_binary(DATA_PATH)
 
+# Go through the data and find extremas of the fields
+extrema = Extrema()
+for field in vec_fields
+    setfield!(extrema, field, Base.extrema(reduce(hcat, getfield(data, field))))
+end
+
+"Get the actual index of the frame
+by its index in the storage vector"
+function real_index(index)
+    if (index == 0 || index == data.l)
+        return index
+    else
+        return index * data.d
+    end
+end
+
 println(pad, "> Plotting the initial states...")
 
 "Plot a matrix from the specific field by index"
@@ -162,8 +195,9 @@ function plot(field::Symbol, index)
         annotations=(
             first(pos),
             last(pos),
-            text(latexstring("$(field)_{$(index)}"), 10)
-        )
+            text(latexstring("$(field)_{$(real_index(index))}"), 10)
+        ),
+        clims=getfield(extrema, field)
     )
 end
 
@@ -171,7 +205,7 @@ end
 for field in vec_fields
     for i in 0:2
         plot(field, i)
-        subscript_index = join(map(d -> '₀' + d, reverse(digits(i))))
+        subscript_index = join(map(d -> '₀' + d, reverse(digits(real_index(i)))))
         savefig(joinpath(PLOTS_DIR, "$(field)$(subscript_index)$(POSTFIX).png"))
     end
 end
@@ -179,7 +213,7 @@ end
 # Create animations of the evolution
 for field in vec_fields
     println(pad, "> Animating the evolution of `$(field)`...")
-    anim = @animate for i in 0:10:data.s
+    anim = @animate for i in 0:data.l-1
         plot(field, i)
     end
     gif(anim, joinpath(PLOTS_DIR, "$(field)$(POSTFIX).mp4"), fps=15, show_msg=false)

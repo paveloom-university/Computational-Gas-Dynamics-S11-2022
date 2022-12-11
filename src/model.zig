@@ -27,17 +27,22 @@ pub fn Model(
         tau: F,
         h: F,
         grid: Grid(F),
+        phi: F,
         eqs: fn (u: F, v: F, ro: F, e: F) F,
         /// The writer is initialized from the path
         writer: Writer(F),
         /// Initialize the model
         pub fn init(s: struct {
-            /// Time step
+            /// Time step [s]
             tau: F,
-            /// Grid step
+            /// Grid step [m]
             h: F,
             /// The Euler grid
             grid: Grid(F),
+            /// The value of the gravity potential [m^2/s^2]
+            ///
+            /// We expect it to be a constant for all cells
+            phi: F,
             /// Equation of state
             eqs: fn (
                 /// Velocity component along the X axis
@@ -49,12 +54,7 @@ pub fn Model(
                 /// Specific energy
                 e: F,
             ) F,
-            /// Relative paths to outputs files
-            ///
-            /// The results will be written to these each time step.
-            /// Note that only extensions `.csv` (for text files)
-            /// and `.bin` (for binary files) are allowed, and
-            /// there must be at least one file
+            /// Relative path to the output file
             path: Path,
         }) !Self {
             // Prepare the writer
@@ -65,6 +65,7 @@ pub fn Model(
                 .h = s.h,
                 .grid = s.grid,
                 .eqs = s.eqs,
+                .phi = s.phi,
                 .writer = writer,
             };
         }
@@ -136,10 +137,11 @@ pub fn Model(
             const zone = tracy.ZoneN(@src(), "Step");
             defer zone.end();
 
-            // Unpack the struct data
+            // Unpack the model parameters
             const tau = self.tau;
             const h = self.h;
             const m = self.grid.n * self.grid.n;
+            const phi = self.phi;
             // Get the fields of interest from the slice
             const u = slice.items(.u);
             const v = slice.items(.v);
@@ -168,9 +170,11 @@ pub fn Model(
                 const u_left = self.grid.border(.left, true, u, index);
                 const u_right = self.grid.border(.right, true, u, index);
                 // Compute the auxiliary values inside the cells
-                const k = tau / h / ro[index];
+                const d = tau / h;
+                const k = d / ro[index];
                 u_aux[index] = u[index] - k * (p_right - p_left);
-                v_aux[index] = v[index] - k * (p_top - p_bottom);
+                // We expect this extra term to to act as a gravity potential
+                v_aux[index] = v[index] - k * (p_top - p_bottom) - d * phi;
                 e_aux[index] = e[index] - k * (p_top * v_top - p_bottom * v_bottom + p_right * u_right - p_left * u_left);
             }
             // Copy the density matrix (since we
@@ -207,21 +211,26 @@ pub fn Model(
                 p[index] = self.eqs(u[index], v[index], ro[index], e[index]);
             }
         }
-        /// Compute the evolution of the system for a specific amount of time steps
-        pub fn compute(self: *Self, s: usize) !void {
+        /// Compute the evolution of the system for a specific amount
+        /// of time steps `s`, saving the results every `d` frames
+        pub fn compute(self: *Self, s: usize, d: usize) !void {
             // Compute pointers to the start of each field of the array of cells
             var slice = self.grid.cells.slice();
             // Write the header
-            try self.writer.writeHeader(s, self.grid.n);
+            try self.writer.writeHeader(s, d, self.grid.n);
             // Write the initial grid to the output file
             try self.writer.writeGrid(&slice);
             // For each time step
-            var i: usize = 0;
-            while (i < s) : (i += 1) {
+            var i: usize = 1;
+            while (i <= s) : (i += 1) {
                 // Perform a computation step
                 self.step(&slice);
-                // Write the current grid to the output file
-                try self.writer.writeGrid(&slice);
+                // Save the results every `d` frames, but
+                // make sure the last one is saved, too
+                if (i % d == 0 or i == s) {
+                    // Write the current grid to the output file
+                    try self.writer.writeGrid(&slice);
+                }
             }
         }
     };

@@ -14,8 +14,10 @@ const F = f64;
 const n_default = 100;
 const tau_default = 1e-8;
 const h_default = 1e-4;
-const s_default = 1000;
+const s_default = 100000;
+const d_default = 1000;
 const seed_default = 0;
+const phi_default = 6e2;
 
 /// Command-line arguments
 const Args = struct {
@@ -23,7 +25,9 @@ const Args = struct {
     tau: F = tau_default,
     h: F = h_default,
     s: usize = s_default,
+    d: usize = d_default,
     seed: u64 = seed_default,
+    phi: F = phi_default,
     path: []const u8,
 };
 
@@ -38,12 +42,12 @@ const Params = clap.parseParamsComptime(std.fmt.comptimePrint(
     \\      [default: {}].
     \\
     \\-t, --tau <f64>
-    \\      Time step.
+    \\      Time step [s].
     \\
     \\      [default: {}].
     \\
     \\-h <f64>
-    \\      Grid step.
+    \\      Grid step [m].
     \\
     \\      [default: {}].
     \\
@@ -52,15 +56,25 @@ const Params = clap.parseParamsComptime(std.fmt.comptimePrint(
     \\
     \\      [default: {}].
     \\
-    \\--seed <u64>
+    \\-d <usize>
+    \\      Save results every `d` frames.
+    \\
+    \\      [default: {}].
+    \\
+    \\    --seed <u64>
     \\      Seed of the random number generator.
+    \\
+    \\      [default: {}].
+    \\
+    \\    --phi <f64>
+    \\      Value of the gravitational potential [m^2/s^2].
     \\
     \\      [default: {}].
     \\
     \\-o, --output <str>
     \\      A path to the output file.
     \\
-, .{ n_default, tau_default, h_default, s_default, seed_default }));
+, .{ n_default, tau_default, h_default, s_default, d_default, seed_default, phi_default }));
 
 // Parse the command-line arguments
 fn parseArgs() !Args {
@@ -98,7 +112,9 @@ fn parseArgs() !Args {
         .tau = res.args.tau orelse tau_default,
         .h = res.args.h orelse h_default,
         .s = res.args.s orelse s_default,
+        .d = res.args.d orelse d_default,
         .seed = res.args.seed orelse seed_default,
+        .phi = res.args.phi orelse phi_default,
         .path = path,
     };
 }
@@ -146,10 +162,10 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
             // The density is equal everywhere [kg/m^3]
             const ro = 0.9002;
             // Let's make the temperature change evenly (per row)
-            // between -25°C and +25°C (converting to Kelvins)
-            const t = -25 +
+            // between -25°C and -15°C (converting to Kelvins)
+            const t = -15 -
                 @intToFloat(F, i / args.n) *
-                50 / @intToFloat(F, args.n - 1) +
+                10 / @intToFloat(F, args.n - 1) +
                 273.15;
             // Specific gas constant [J/kg/K]
             // (gas constant [J/K/mol] divided by the molar mass [kg/mol])
@@ -178,11 +194,12 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
             .n = args.n,
             .cells = cells,
         },
+        .phi = args.phi,
         .eqs = eqs,
         .path = args.path,
     });
     // Compute the evolution of the system for 1000 time steps
-    try model.compute(args.s);
+    try model.compute(args.s, args.d);
 }
 
 // Run the model with a default allocator
@@ -213,7 +230,9 @@ test "Benchmark" {
     const n = 20;
     // Prepare test arguments
     const args = Args{
-        .path = "res.bin",
+        .path = "bench.bin",
+        .s = 1000,
+        .d = 10,
     };
     // Prepare a vector for storing the elapsed time
     var elapsed = @splat(n, @as(F, 0));
@@ -237,7 +256,7 @@ test "Benchmark" {
     const std_dev = @sqrt(@reduce(.Add, diffs * diffs) / n);
     // Print the statistics
     std.debug.print(
-        "\nIterations: {}\nMax: {:>28.15} s.\nMin: {:>28.15} s.\nMean: {:>27.15} s.\nStd. dev.: {:>22.15} s.\n",
-        .{ n, min * 1e-9, max * 1e-9, mean * 1e-9, std_dev * 1e-9 },
+        "\nIterations: {}\ns:          {}\nd:          {}\nMax: {:>28.15} s.\nMin: {:>28.15} s.\nMean: {:>27.15} s.\nStd. dev.: {:>22.15} s.\n",
+        .{ n, args.s, args.d, min * 1e-9, max * 1e-9, mean * 1e-9, std_dev * 1e-9 },
     );
 }
