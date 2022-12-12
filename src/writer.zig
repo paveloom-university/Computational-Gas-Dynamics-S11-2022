@@ -16,7 +16,7 @@ pub fn Writer(
         const FileWriter = std.fs.File.Writer;
         const BufferedWriter = std.io.BufferedWriter(4096, FileWriter);
         writer: BufferedWriter,
-        inline fn writeUsize(self: *Self, buf: *[@sizeOf(usize)]u8, value: usize) !void {
+        fn writeUsize(self: *Self, buf: *[@sizeOf(usize)]u8, value: usize) !void {
             std.mem.writeIntNative(usize, buf, value);
             _ = try self.writer.write(buf);
         }

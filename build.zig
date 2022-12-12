@@ -29,6 +29,7 @@ pub fn build(b: *std.build.Builder) void {
     const convection_test = b.addTest("examples/convection.zig");
     convection_test.setBuildMode(mode);
     convection_test.setFilter("Convection");
+    convection_test.test_evented_io = true;
     convection_test_step.dependOn(&convection_test.step);
     // Add an option to run the test executable as an integration test
     const benchmark_test_step = b.step("bench", "Benchmark the convection model");
@@ -102,8 +103,8 @@ pub fn build(b: *std.build.Builder) void {
         step.addPackage(new_lpm_pkg);
         // Switch to the `stage1` compiler to avoid the
         // https://github.com/Hejsil/zig-clap/issues/84
-        // bug and to avoid passing a function pointer
-        // instead of the function body
+        // bug, to avoid passing a function pointer
+        // instead of the function body, and to use async
         step.use_stage1 = true;
     }
     exe.addPackage(clap_pkg);

@@ -24,6 +24,12 @@ pub fn Model(
     }
     return struct {
         const Self = @This();
+        /// A collection of async frames. These are used for multithreading
+        const Promises = struct {
+            step_1: []@Frame(step1),
+            step_2: []@Frame(step2),
+        };
+        allocator: std.mem.Allocator,
         tau: F,
         h: F,
         grid: Grid(F),
@@ -31,8 +37,13 @@ pub fn Model(
         eqs: fn (u: F, v: F, ro: F, e: F) F,
         /// The writer is initialized from the path
         writer: Writer(F),
+        threads: usize,
+        promises: Promises,
         /// Initialize the model
         pub fn init(s: struct {
+            /// Allocator (you're expected to allocate `Grid.Cells` yourself,
+            /// but the allocator is also used for allocating promises)
+            allocator: std.mem.Allocator,
             /// Time step [s]
             tau: F,
             /// Grid step [m]
@@ -56,18 +67,38 @@ pub fn Model(
             ) F,
             /// Relative path to the output file
             path: Path,
+            /// Number of CPU threads to use
+            threads: usize,
         }) !Self {
             // Prepare the writer
             const writer = try Writer(F).from(s.path);
+            // Prepare arrays for promises
+            const promises = .{
+                .step_1 = if (s.threads > 1) try s.allocator.alloc(@Frame(step1), s.threads) else undefined,
+                .step_2 = if (s.threads > 1) try s.allocator.alloc(@Frame(step2), s.threads) else undefined,
+            };
             // Initialize the model
             return Self{
+                .allocator = s.allocator,
                 .tau = s.tau,
                 .h = s.h,
                 .grid = s.grid,
                 .eqs = s.eqs,
                 .phi = s.phi,
                 .writer = writer,
+                .threads = s.threads,
+                .promises = promises,
             };
+        }
+        /// Deinitialize the model (this includes
+        /// the `Grid.Cells` and the promises)
+        pub fn deinit(self: *Self) void {
+            self.grid.cells.deinit(self.allocator);
+            if (self.threads > 1) {
+                self.allocator.free(self.promises.step_1);
+                self.allocator.free(self.promises.step_2);
+            }
+            self.* = undefined;
         }
         /// A flow to/from the neighbour cell
         const Flow = struct {
@@ -131,16 +162,22 @@ pub fn Model(
                 flows.top.value * (if (flows.top.into) self.grid.neighbour(.top, normal, array, index) else array[index])) /
                 self.h / self.h / ro;
         }
-        /// Compute the evolution of the system for a single time step
-        fn step(self: *Self, slice: *Cells(F).Slice) void {
+        /// Compute the first part of the time step
+        fn step1(self: *Self, slice: *Cells(F).Slice, start: usize, end: usize) void {
+            // If there are several threads
+            if (self.threads > 1) {
+                // Inform the event loop we're CPU bound.
+                // This effectively puts a worker on every logical core.
+                std.event.Loop.startCpuBoundOperation();
+            }
+
             // Mark the Tracy zone
-            const zone = tracy.ZoneN(@src(), "Step");
+            const zone = tracy.ZoneN(@src(), "Step 1");
             defer zone.end();
 
             // Unpack the model parameters
             const tau = self.tau;
             const h = self.h;
-            const m = self.grid.n * self.grid.n;
             const phi = self.phi;
             // Get the fields of interest from the slice
             const u = slice.items(.u);
@@ -150,11 +187,10 @@ pub fn Model(
             const p = slice.items(.p);
             const u_aux = slice.items(.u_aux);
             const v_aux = slice.items(.v_aux);
-            const ro_aux = slice.items(.ro_aux);
             const e_aux = slice.items(.e_aux);
             // For each cell in the grid
-            var index: usize = 0;
-            while (index < m) : (index += 1) {
+            var index: usize = start;
+            while (index < end) : (index += 1) {
                 // Execute the Euler stage
                 //
                 // At this stage, only the quantities related to the cell as
@@ -177,12 +213,35 @@ pub fn Model(
                 v_aux[index] = v[index] - k * (p_top - p_bottom) - d * phi;
                 e_aux[index] = e[index] - k * (p_top * v_top - p_bottom * v_bottom + p_right * u_right - p_left * u_left);
             }
-            // Copy the density matrix (since we
-            // compute the density in the next part)
-            std.mem.copy(F, ro_aux, ro);
+        }
+        /// Compute the second part of the time step
+        fn step2(self: *Self, slice: *Cells(F).Slice, start: usize, end: usize) void {
+            // If there are several threads
+            if (self.threads > 1) {
+                // Inform the event loop we're CPU bound.
+                // This effectively puts a worker on every logical core.
+                std.event.Loop.startCpuBoundOperation();
+            }
+
+            // Mark the Tracy zone
+            const zone = tracy.ZoneN(@src(), "Step 2");
+            defer zone.end();
+
+            // Unpack the model parameters
+            const h = self.h;
+            // Get the fields of interest from the slice
+            const u = slice.items(.u);
+            const v = slice.items(.v);
+            const ro = slice.items(.ro);
+            const e = slice.items(.e);
+            const p = slice.items(.p);
+            const u_aux = slice.items(.u_aux);
+            const v_aux = slice.items(.v_aux);
+            const ro_aux = slice.items(.ro_aux);
+            const e_aux = slice.items(.e_aux);
             // For each cell in the grid
-            index = 0;
-            while (index < m) : (index += 1) {
+            var index: usize = start;
+            while (index < end) : (index += 1) {
                 // Execute the Lagrangian stage
                 //
                 // At this stage, transfer effects are calculated that take
@@ -211,6 +270,63 @@ pub fn Model(
                 p[index] = self.eqs(u[index], v[index], ro[index], e[index]);
             }
         }
+        /// Compute the evolution of the system for a single time step
+        fn step(self: *Self, slice: *Cells(F).Slice) !void {
+            // Mark the Tracy zone
+            const zone = tracy.ZoneN(@src(), "Step");
+            defer zone.end();
+
+            // Get the fields of interest from the slice
+            const ro = slice.items(.ro);
+            const ro_aux = slice.items(.ro_aux);
+            // Divide cells between the threads
+            const m = self.grid.n * self.grid.n;
+            const h = m / self.threads;
+            const r = m % self.threads;
+            // If there are several threads
+            if (self.threads > 1) {
+                // For each thread
+                var thread: usize = 0;
+                while (thread < self.threads) : (thread += 1) {
+                    // The first thread here may take a bit more work than others
+                    const start = if (thread == 0) 0 else r + h * thread;
+                    const end = r + h * (thread + 1);
+                    // Execute the first part of the method
+                    // (includes the Euler stage)
+                    self.promises.step_1[thread] = async self.step1(slice, start, end);
+                }
+                // Synchronize the threads
+                for (self.promises.step_1) |*future| {
+                    await future;
+                }
+            } else {
+                // Otherwise, just do a simple call
+                self.step1(slice, 0, m);
+            }
+            // Copy the density matrix (since we
+            // compute the density in the next part)
+            std.mem.copy(F, ro_aux, ro);
+            // If there are several threads
+            if (self.threads > 1) {
+                // For each thread
+                var thread: usize = 0;
+                while (thread < self.threads) : (thread += 1) {
+                    // The first thread here may take a bit more work than others
+                    const start = if (thread == 0) 0 else r + h * thread;
+                    const end = r + h * (thread + 1);
+                    // Execute the second part of the method
+                    // (includes the Lagrangian stage and the final stage)
+                    self.promises.step_2[thread] = async self.step2(slice, start, end);
+                }
+                // Synchronize the threads
+                for (self.promises.step_2) |*future| {
+                    await future;
+                }
+            } else {
+                // Otherwise, just do a simple call
+                self.step2(slice, 0, m);
+            }
+        }
         /// Compute the evolution of the system for a specific amount
         /// of time steps `s`, saving the results every `d` frames
         pub fn compute(self: *Self, s: usize, d: usize) !void {
@@ -224,7 +340,7 @@ pub fn Model(
             var i: usize = 1;
             while (i <= s) : (i += 1) {
                 // Perform a computation step
-                self.step(&slice);
+                try self.step(&slice);
                 // Save the results every `d` frames, but
                 // make sure the last one is saved, too
                 if (i % d == 0 or i == s) {

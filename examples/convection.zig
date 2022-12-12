@@ -4,6 +4,14 @@ const clap = @import("clap");
 const lpm = @import("lpm");
 const tracy = @import("tracy");
 
+// We use evented IO for multithreading
+//
+// Unfortunately, this makes things much slower
+// for single-threaded scenarios. You might want
+// to comment this line if you use one thread
+// (which is the default!)
+pub const io_mode = .evented;
+
 /// Type of a floating-point number
 /// to use across the program
 const F = f64;
@@ -18,6 +26,7 @@ const s_default = 100000;
 const d_default = 1000;
 const seed_default = 0;
 const phi_default = 6e2;
+const j_default = 1;
 
 /// Command-line arguments
 const Args = struct {
@@ -28,6 +37,7 @@ const Args = struct {
     d: usize = d_default,
     seed: u64 = seed_default,
     phi: F = phi_default,
+    j: usize = j_default,
     path: []const u8,
 };
 
@@ -71,10 +81,24 @@ const Params = clap.parseParamsComptime(std.fmt.comptimePrint(
     \\
     \\      [default: {}].
     \\
+    \\-j <usize>
+    \\      Number of threads to use.
+    \\
+    \\      [default: {}].
+    \\
     \\-o, --output <str>
     \\      A path to the output file.
     \\
-, .{ n_default, tau_default, h_default, s_default, d_default, seed_default, phi_default }));
+, .{
+    n_default,
+    tau_default,
+    h_default,
+    s_default,
+    d_default,
+    seed_default,
+    phi_default,
+    j_default,
+}));
 
 // Parse the command-line arguments
 fn parseArgs() !Args {
@@ -115,6 +139,7 @@ fn parseArgs() !Args {
         .d = res.args.d orelse d_default,
         .seed = res.args.seed orelse seed_default,
         .phi = res.args.phi orelse phi_default,
+        .j = res.args.j orelse j_default,
         .path = path,
     };
 }
@@ -185,9 +210,9 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
         }
         break :cells cells;
     };
-    defer cells.deinit(allocator);
     // Initialize the model
     var model = try lpm.Model(F).init(.{
+        .allocator = allocator,
         .tau = args.tau,
         .h = args.h,
         .grid = lpm.Grid(F){
@@ -197,7 +222,9 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
         .phi = args.phi,
         .eqs = eqs,
         .path = args.path,
+        .threads = args.j,
     });
+    defer model.deinit();
     // Compute the evolution of the system for 1000 time steps
     try model.compute(args.s, args.d);
 }
@@ -218,7 +245,9 @@ pub fn main() !void {
 test "Convection" {
     // Prepare test arguments
     const args = Args{
-        .path = "res.bin",
+        .path = "test.bin",
+        .s = 1000,
+        .d = 10,
     };
     // Run the model
     try run(std.testing.allocator, &args);

@@ -33,8 +33,8 @@ To run the example which simulates the convection process, run one of the follow
 
 ```bash
 # Run with the default allocator
-zig build run -- -o res.bin
-zig build run -Drelease-fast -- -o res.bin
+zig build run -- -o res.bin -j $(nproc)
+zig build run -Drelease-fast -- -o res.bin -j $(nproc)
 
 # Run with the Tracy integration
 zig build run -Dtracy -Drelease-fast -- -o res.bin
