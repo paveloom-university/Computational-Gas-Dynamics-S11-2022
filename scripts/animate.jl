@@ -175,6 +175,8 @@ for field in vec_fields
     setfield!(extrema, field, Base.extrema(reduce(hcat, getfield(data, field))))
 end
 
+println(pad, "> Plotting the initial states...")
+
 "Get the actual index of the frame
 by its index in the storage vector"
 function real_index(index)
@@ -185,9 +187,12 @@ function real_index(index)
     end
 end
 
-println(pad, "> Plotting the initial states...")
+"Get the subscript string from the virtual index"
+function subscript(i)::String
+    return join(map(d -> '₀' + d, reverse(digits(real_index(i)))))
+end
 
-"Plot a matrix from the specific field by index"
+"Plot a heatmap for the matrix from the specific field by index"
 function plot(field::Symbol, index)
     pos = field == :ρ ? (-1.9, -2.15) : (-1.75, -1.75)
     heatmap(
@@ -201,16 +206,47 @@ function plot(field::Symbol, index)
     )
 end
 
+# Define the range of arrows' coordinates
+q_step = 10
+q_range = q_step:q_step:data.n-q_step
+q_x = reduce(vcat, [repeat([q], length(q_range)) for q in q_range])
+q_y = reduce(vcat, [repeat(collect(q_range)) for _ in q_range])
+
+"Plot a velocity field plot by index"
+function quiver(index)
+    m = Int(data.n * data.n)
+    q_u = [reshape(data.u[index+1], m)[i] for i in q_x]
+    q_v = [reshape(data.v[index+1], m)[i] for i in q_x]
+    Plots.quiver(
+        q_x,
+        q_y,
+        quiver=(q_u, q_v),
+        lims=(0.1, data.n),
+        annotations=(
+            -1.75,
+            -1.75,
+            text(latexstring("q_{$(real_index(index))}"), 10)
+        ),
+    )
+end
+
 # Plot the heatmaps of the first 3 states
 for field in vec_fields
     for i in 0:2
         plot(field, i)
-        subscript_index = join(map(d -> '₀' + d, reverse(digits(real_index(i)))))
-        savefig(joinpath(PLOTS_DIR, "$(field)$(subscript_index)$(POSTFIX).png"))
+        savefig(joinpath(PLOTS_DIR, "q$(subscript(i))$(POSTFIX).png"))
     end
 end
 
-# Create animations of the evolution
+# Plot the velocity field of the first 3 states
+for i in 0:2
+    for i in 0:2
+        quiver(i)
+        savefig(joinpath(PLOTS_DIR, "q$(subscript(i))$(POSTFIX).png"))
+    end
+end
+
+# Create animations of the evolution of the system
 for field in vec_fields
     println(pad, "> Animating the evolution of `$(field)`...")
     anim = @animate for i in 0:data.l-1
@@ -218,6 +254,13 @@ for field in vec_fields
     end
     gif(anim, joinpath(PLOTS_DIR, "$(field)$(POSTFIX).mp4"), fps=15, show_msg=false)
 end
+
+# Create an animation of the evolution of the velocity field
+println(pad, "> Animating the evolution of `q`...")
+anim = @animate for i in 0:data.l-1
+    quiver(i)
+end
+gif(anim, joinpath(PLOTS_DIR, "q$(POSTFIX).mp4"), fps=15, show_msg=false)
 
 # Mark data for garbage collection
 data = nothing
