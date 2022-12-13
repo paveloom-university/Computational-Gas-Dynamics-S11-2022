@@ -33,6 +33,7 @@ end
 
 # Define default values for optional arguments
 POSTFIX = ""
+FORCE = false
 
 # Parse the options
 for i in eachindex(ARGS)
@@ -45,6 +46,11 @@ for i in eachindex(ARGS)
             exit(1)
         end
     end
+    # Skip the check for indeterminate values
+    if ARGS[i] == "--force"
+        check_last(i)
+        global FORCE = true
+    end
 end
 
 # Prepare color codes
@@ -56,13 +62,14 @@ YELLOW = "\e[33m"
 if length(ARGS) < 1 || "--help" in ARGS
     println("""
         $(YELLOW)USAGE:$(RESET)
-        { julia --project=. | ./julia.bash } scripts/coords.jl [--postfix <POSTFIX>] <DATA_PATH>
+        { julia --project=. | ./julia.bash } scripts/coords.jl [--postfix <POSTFIX>] [--force] <DATA_PATH>
 
         $(YELLOW)ARGS:$(RESET)
             $(GREEN)<DATA_PATH>$(RESET)    Path to the data file
 
         $(YELLOW)OPTIONS:$(RESET)
-            $(GREEN)--postfix <POSTFIX>$(RESET)    A postfix for the names of output files"""
+            $(GREEN)--postfix <POSTFIX>$(RESET)    A postfix for the names of output files
+            $(GREEN)--force$(RESET)                Skip the check for indeterminate values"""
     )
     exit(1)
 end
@@ -168,6 +175,27 @@ end
 
 # Read the data
 data = read_binary(DATA_PATH)
+
+# Go through the data and check whether it has indeterminate values
+if (!FORCE)
+    for field in vec_fields
+        for matrix in getfield(data, field)
+            for value in matrix
+                if isnan(value) || isinf(value)
+                    println(
+                        '\n',
+                        """
+                        $(pad)Whoops! Seems like your data has indeterminate values.
+                        $(pad)You might want to check if the Courant–Friedrichs–Lewy
+                        $(pad)condition is met. Add `--force` to ignore this error.
+                        """
+                    )
+                    exit(1)
+                end
+            end
+        end
+    end
+end
 
 # Go through the data and find extremas of the fields
 extrema = Extrema()
