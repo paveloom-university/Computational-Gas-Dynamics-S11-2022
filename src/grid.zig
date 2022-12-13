@@ -13,7 +13,7 @@ pub fn Cell(
         const Self = @This();
         /// Velocity component along the X axis
         u: F,
-        /// Velocity component along the X axis
+        /// Velocity component along the Y axis
         v: F,
         /// Density
         ro: F,
@@ -23,7 +23,7 @@ pub fn Cell(
         p: F,
         /// Auxiliary velocity component along the X axis
         u_aux: F = 0,
-        /// Auxiliary velocity component along the X axis
+        /// Auxiliary velocity component along the Y axis
         v_aux: F = 0,
         /// Auxiliary density
         ro_aux: F = 0,

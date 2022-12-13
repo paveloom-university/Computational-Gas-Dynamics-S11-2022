@@ -234,7 +234,7 @@ end
 for field in vec_fields
     for i in 0:2
         plot(field, i)
-        savefig(joinpath(PLOTS_DIR, "q$(subscript(i))$(POSTFIX).png"))
+        savefig(joinpath(PLOTS_DIR, "$(field)$(subscript(i))$(POSTFIX).png"))
     end
 end
 
@@ -262,7 +262,7 @@ anim = @animate for i in 0:data.l-1
 end
 gif(anim, joinpath(PLOTS_DIR, "q$(POSTFIX).mp4"), fps=15, show_msg=false)
 
-# Mark data for garbage collection
+# Mark the data for garbage collection
 data = nothing
 
 println()

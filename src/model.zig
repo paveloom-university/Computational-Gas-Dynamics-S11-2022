@@ -12,7 +12,7 @@ const Writer = @import("writer.zig").Writer;
 
 /// Model
 ///
-/// Note the representation of cells in memory doesn't change
+/// Note that the representation of the cells in memory doesn't change
 /// with the grid step. Only the latter is model-specific.
 pub fn Model(
     /// Type of a floating-point number
@@ -58,7 +58,7 @@ pub fn Model(
             eqs: fn (
                 /// Velocity component along the X axis
                 u: F,
-                /// Velocity component along the X axis
+                /// Velocity component along the Y axis
                 v: F,
                 /// Density
                 ro: F,
@@ -124,7 +124,7 @@ pub fn Model(
             ro_aux: []F,
             index: usize,
         ) Flow {
-            // Compute the halved sum of velocities
+            // Compute the halved sum of the velocities
             const aux_vel_average = (vel_aux[index] + self.grid.neighbour(dir, true, vel_aux, index)) / 2;
             // Since we have axes left-to-right, bottom-to-top,
             // having positive sum of velocities here means

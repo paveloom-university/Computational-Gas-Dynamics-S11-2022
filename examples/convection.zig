@@ -18,7 +18,8 @@ const F = f64;
 
 // Default values of the parameters
 //
-// First three should follow the Courant–Friedrichs–Lewy condition
+// Characteristic value of the velocity and the time steps
+// here should follow the Courant–Friedrichs–Lewy condition
 const n_default = 100;
 const tau_default = 1e-8;
 const h_default = 1e-4;
@@ -107,7 +108,7 @@ fn parseArgs() !Args {
     var res = clap.parse(clap.Help, &Params, clap.parsers.default, .{
         .diagnostic = &diag,
     }) catch |err| {
-        // Report useful error and exit
+        // Report an error and exit
         try diag.report(std.io.getStdErr().writer(), err);
         return err;
     };
@@ -148,7 +149,7 @@ fn parseArgs() !Args {
 fn eqs(
     /// Velocity component along the X axis
     u: F,
-    /// Velocity component along the X axis
+    /// Velocity component along the Y axis
     v: F,
     /// Density
     ro: F,
@@ -225,7 +226,7 @@ fn run(allocator: std.mem.Allocator, args: *const Args) !void {
         .threads = args.j,
     });
     defer model.deinit();
-    // Compute the evolution of the system for 1000 time steps
+    // Compute the evolution of the system for `s` time steps
     try model.compute(args.s, args.d);
 }
 
