@@ -38,7 +38,7 @@ pub fn Model(
         /// The writer is initialized from the path
         writer: Writer(F),
         threads: usize,
-        promises: Promises,
+        promises: Promises = undefined,
         /// Initialize the model
         pub fn init(s: struct {
             /// Allocator (you're expected to allocate `Grid.Cells` yourself,
@@ -72,13 +72,8 @@ pub fn Model(
         }) !Self {
             // Prepare the writer
             const writer = try Writer(F).from(s.path);
-            // Prepare arrays for promises
-            const promises = .{
-                .step_1 = if (s.threads > 1) try s.allocator.alloc(@Frame(step1), s.threads) else undefined,
-                .step_2 = if (s.threads > 1) try s.allocator.alloc(@Frame(step2), s.threads) else undefined,
-            };
             // Initialize the model
-            return Self{
+            var self = Self{
                 .allocator = s.allocator,
                 .tau = s.tau,
                 .h = s.h,
@@ -87,8 +82,16 @@ pub fn Model(
                 .phi = s.phi,
                 .writer = writer,
                 .threads = s.threads,
-                .promises = promises,
             };
+            // If there are several threads
+            if (self.threads > 1) {
+                // Prepare arrays for promises
+                self.promises = Promises{
+                    .step_1 = try s.allocator.alloc(@Frame(step1), s.threads),
+                    .step_2 = try s.allocator.alloc(@Frame(step2), s.threads),
+                };
+            }
+            return self;
         }
         /// Deinitialize the model (this includes
         /// the `Grid.Cells` and the promises)
